@@ -9,7 +9,6 @@ import (
 	"logi/internal/utils"
 	"logi/pkg/auth"
 	"logi/pkg/scheduler"
-	"logi/pkg/websocket"
 )
 
 func main() {
@@ -33,24 +32,23 @@ func main() {
 	userRepo := repositories.NewUserRepository(dbClient)
 	bookingRepo := repositories.NewBookingRepository(dbClient)
 	driverRepo := repositories.NewDriverRepository(dbClient)
+	adminRepo := repositories.NewAdminRepository(dbClient)
 
 	// Initialize services
 	pricingService := services.NewPricingService(bookingRepo, driverRepo)
 	userService := services.NewUserService(userRepo, authService)
 	bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService)
 	driverService := services.NewDriverService(driverRepo, bookingRepo, authService)
+	adminService := services.NewAdminService(adminRepo, authService)
 
 	// Initialize handlers and pass the auth service where needed
 	userHandler := handlers.NewUserHandler(userService, authService)
 	bookingHandler := handlers.NewBookingHandler(bookingService)
 	driverHandler := handlers.NewDriverHandler(driverService, authService)
-	websocketHandler := handlers.NewWebSocketHandler()
-
-	// Start the WebSocket server (to broadcast messages to clients)
-	websocket.StartWebSocketServer() // Add this line to start WebSocket server
+	adminHandler := handlers.NewAdminHandler(adminService, authService, userService, driverService, bookingService)
 
 	// Initialize router
-	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, websocketHandler, authService)
+	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService)
 
 	// Start Scheduler
 	scheduler.StartScheduler(bookingService)

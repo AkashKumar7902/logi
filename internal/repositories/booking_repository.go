@@ -15,6 +15,7 @@ type BookingRepository interface {
     FindByID(id string) (*models.Booking, error)
     FindPendingScheduledBookings() ([]*models.Booking, error)
     GetActiveBookingsCount() (int64, error)
+    GetBookingStatistics() (*models.BookingStatistics, error)
 }
 
 type bookingRepository struct {
@@ -77,4 +78,52 @@ func (r *bookingRepository) GetActiveBookingsCount() (int64, error) {
         bson.M{"status": bson.M{"$in": []string{"Pending", "Driver Assigned", "In Transit"}}},
     )
     return count, err
+}
+
+func (r *bookingRepository) GetBookingStatistics() (*models.BookingStatistics, error) {
+    ctx := context.Background()
+    totalBookings, err := r.collection.CountDocuments(ctx, bson.M{})
+    if err != nil {
+        return nil, err
+    }
+
+    completedBookings, err := r.collection.CountDocuments(ctx, bson.M{"status": "Completed"})
+    if err != nil {
+        return nil, err
+    }
+
+    // Calculate average trip time for completed bookings
+    matchStage := bson.D{{Key: "$match", Value: bson.D{{Key: "status", Value: "Completed"}}}}
+    projectStage := bson.D{{Key: "$project", Value: bson.D{
+        {Key: "duration", Value: bson.D{{Key: "$subtract", Value: []interface{}{"$completed_at", "$started_at"}}}},
+    }}}
+    groupStage := bson.D{{Key: "$group", Value: bson.D{
+        {Key: "_id", Value: nil},
+        {Key: "averageDuration", Value: bson.D{{Key: "$avg", Value: "$duration"}}},
+    }}}
+
+    cursor, err := r.collection.Aggregate(ctx, mongo.Pipeline{matchStage, projectStage, groupStage})
+    if err != nil {
+        return nil, err
+    }
+    var results []bson.M
+    if err := cursor.All(ctx, &results); err != nil {
+        return nil, err
+    }
+
+    var averageTripTime float64
+    if len(results) > 0 {
+        averageDuration := results[0]["averageDuration"]
+        if averageDuration != nil {
+            averageTripTime = float64(averageDuration.(int64)) / 60000 // Convert ms to minutes
+        }
+    }
+
+    stats := &models.BookingStatistics{
+        TotalBookings:     totalBookings,
+        CompletedBookings: completedBookings,
+        AverageTripTime:   averageTripTime,
+    }
+
+    return stats, nil
 }

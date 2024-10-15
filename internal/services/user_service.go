@@ -36,6 +36,7 @@ func (s *UserService) Register(user *models.User, password string) error {
     user.ID = uuid.NewString()
     user.PasswordHash = hashedPassword
     user.CreatedAt = time.Now()
+    user.Role = "user" // Add this line
 
     return s.Repo.Create(user)
 }

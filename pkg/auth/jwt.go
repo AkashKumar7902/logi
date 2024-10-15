@@ -18,30 +18,35 @@ func NewAuthService(secret string) *AuthService {
     }
 }
 
-func (a *AuthService) GenerateJWT(userID string) (string, error) {
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
-        ExpiresAt: time.Now().Add(72 * time.Hour).Unix(),
-        Subject:   userID,
+func (a *AuthService) GenerateJWT(userID string, role string) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "exp":  time.Now().Add(72 * time.Hour).Unix(),
+        "sub":  userID,
+        "role": role,
     })
     return token.SignedString(a.jwtSecret)
 }
 
-func (a *AuthService) ValidateJWT(tokenString string) (string, error) {
+func (a *AuthService) ValidateJWT(tokenString string) (string, string, error) {
     token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
         return a.jwtSecret, nil
     })
     if err != nil || !token.Valid {
-        return "", errors.New("invalid token")
+        return "", "", errors.New("invalid token")
     }
     claims, ok := token.Claims.(jwt.MapClaims)
     if !ok {
-        return "", errors.New("invalid token claims")
+        return "", "", errors.New("invalid token claims")
     }
     userID, ok := claims["sub"].(string)
     if !ok {
-        return "", errors.New("invalid token subject")
+        return "", "", errors.New("invalid token subject")
     }
-    return userID, nil
+    role, ok := claims["role"].(string)
+    if !ok {
+        return "", "", errors.New("invalid token role")
+    }
+    return userID, role, nil
 }
 
 func (a *AuthService) HashPassword(password string) (string, error) {

@@ -15,6 +15,9 @@ type DriverRepository interface {
     FindAvailableDriver(location models.Location, vehicleType string) (*models.Driver, error)
     UpdateStatus(driverID string, status string) error
     GetAvailableDriversCount() (int64, error)
+    GetAllDrivers() ([]*models.Driver, error)
+    FindByID(driverID string) (*models.Driver, error)
+    UpdateDriver(driver *models.Driver) error
 }
 
 type driverRepository struct {
@@ -68,4 +71,40 @@ func (r *driverRepository) UpdateStatus(driverID string, status string) error {
 func (r *driverRepository) GetAvailableDriversCount() (int64, error) {
     count, err := r.collection.CountDocuments(context.Background(), bson.M{"status": "Available"})
     return count, err
+}
+
+func (r *driverRepository) GetAllDrivers() ([]*models.Driver, error) {
+    cursor, err := r.collection.Find(context.Background(), bson.M{})
+    if err != nil {
+        return nil, err
+    }
+    defer cursor.Close(context.Background())
+
+    var drivers []*models.Driver
+    for cursor.Next(context.Background()) {
+        var driver models.Driver
+        if err := cursor.Decode(&driver); err != nil {
+            continue
+        }
+        drivers = append(drivers, &driver)
+    }
+    return drivers, nil
+}
+
+func (r *driverRepository) FindByID(driverID string) (*models.Driver, error) {
+    var driver models.Driver
+    err := r.collection.FindOne(context.Background(), bson.M{"_id": driverID}).Decode(&driver)
+    if err != nil {
+        return nil, err
+    }
+    return &driver, nil
+}
+
+func (r *driverRepository) UpdateDriver(driver *models.Driver) error {
+    _, err := r.collection.UpdateOne(
+        context.Background(),
+        bson.M{"_id": driver.ID},
+        bson.M{"$set": driver},
+    )
+    return err
 }

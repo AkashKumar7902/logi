@@ -87,6 +87,24 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 		return errors.New("invalid status transition")
 	}
 
+	// Update timestamps based on status
+    currentTime := time.Now()
+    switch status {
+    case "In Transit":
+        if booking.StartedAt == nil {
+            booking.StartedAt = &currentTime
+        }
+    case "Completed":
+        if booking.CompletedAt == nil {
+            booking.CompletedAt = &currentTime
+        }
+    }
+
+    err = s.BookingRepo.Update(booking)
+    if err != nil {
+        return err
+    }
+
 	// Update the booking status
 	booking.Status = status
 	err = s.BookingRepo.Update(booking)
@@ -103,6 +121,18 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 	}
 
 	return nil
+}
+
+func (s *DriverService) GetAllDrivers() ([]*models.Driver, error) {
+    return s.Repo.GetAllDrivers()
+}
+
+func (s *DriverService) GetDriverByID(driverID string) (*models.Driver, error) {
+    return s.Repo.FindByID(driverID)
+}
+
+func (s *DriverService) UpdateDriver(driver *models.Driver) error {
+    return s.Repo.UpdateDriver(driver)
 }
 
 // isValidTransition checks if the status transition is valid

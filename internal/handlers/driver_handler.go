@@ -66,7 +66,7 @@ func (h *DriverHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.AuthService.GenerateJWT(driver.ID)
+	token, err := h.AuthService.GenerateJWT(driver.ID, "driver")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return

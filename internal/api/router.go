@@ -8,7 +8,13 @@ import (
     "github.com/gin-gonic/gin"
 )
 
-func SetupRouter(userHandler *handlers.UserHandler, bookingHandler *handlers.BookingHandler, driverHandler *handlers.DriverHandler, websocketHandler *handlers.WebSocketHandler, authService *auth.AuthService) *gin.Engine {
+func SetupRouter(
+    userHandler *handlers.UserHandler,
+    bookingHandler *handlers.BookingHandler,
+    driverHandler *handlers.DriverHandler,
+    adminHandler *handlers.AdminHandler,
+    authService *auth.AuthService,
+) *gin.Engine {
     router := gin.Default()
 
     // Public routes
@@ -16,19 +22,27 @@ func SetupRouter(userHandler *handlers.UserHandler, bookingHandler *handlers.Boo
     router.POST("/users/login", userHandler.Login)
     router.POST("/drivers/register", driverHandler.Register)
     router.POST("/drivers/login", driverHandler.Login)
-
-    // WebSocket endpoint
-    router.GET("/ws", websocketHandler.HandleWebSocket)
+    router.POST("/admins/register", adminHandler.Register)
+    router.POST("/admins/login", adminHandler.Login)
 
     // Protected routes with JWT middleware
-    userProtected := router.Group("/", utils.JWTAuthMiddleware(authService))
+    userProtected := router.Group("/", utils.JWTAuthMiddleware(authService, "user"))
     {
         userProtected.POST("/bookings", bookingHandler.CreateBooking)
     }
 
-    driverProtected := router.Group("/drivers", utils.JWTAuthMiddleware(authService))
+    driverProtected := router.Group("/drivers", utils.JWTAuthMiddleware(authService, "driver"))
     {
         driverProtected.POST("/status", driverHandler.UpdateStatus)
+        driverProtected.POST("/booking-status", driverHandler.UpdateBookingStatus)
+    }
+
+    adminProtected := router.Group("/admin", utils.JWTAuthMiddleware(authService, "admin"))
+    {
+        adminProtected.GET("/drivers", adminHandler.GetAllDrivers)
+        adminProtected.GET("/drivers/:driverID", adminHandler.GetDriver)
+        adminProtected.PUT("/drivers/:driverID", adminHandler.UpdateDriver)
+        adminProtected.GET("/analytics", adminHandler.GetAnalytics)
     }
 
     return router

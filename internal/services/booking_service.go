@@ -83,3 +83,7 @@ func (s *BookingService) ActivateScheduledBookings() error {
 
     return nil
 }
+
+func (s *BookingService) GetBookingStatistics() (*models.BookingStatistics, error) {
+    return s.Repo.GetBookingStatistics()
+}
