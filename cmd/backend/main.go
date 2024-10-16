@@ -7,6 +7,7 @@ import (
 	"logi/internal/messaging"
 	"logi/internal/repositories"
 	"logi/internal/services"
+	"logi/internal/services/distance"
 	"logi/internal/utils"
 	"logi/pkg/auth"
 	"logi/pkg/scheduler"
@@ -52,8 +53,17 @@ func main() {
 	driverRepo := repositories.NewDriverRepository(dbClient)
 	adminRepo := repositories.NewAdminRepository(dbClient)
 
+	// Initialize DistanceCalculator based on configuration
+	var distanceCalc distance.DistanceCalculator
+	switch config.DistanceCalculatorType {
+	case "google_maps":
+		distanceCalc = distance.NewGoogleMapsCalculator(config.GoogleMapsAPIKey)
+	default:
+		distanceCalc = distance.NewHaversineCalculator()
+	}	
+
 	// Initialize services
-	pricingService := services.NewPricingService(bookingRepo, driverRepo)
+	pricingService := services.NewPricingService(bookingRepo, driverRepo, distanceCalc)
 	userService := services.NewUserService(userRepo, authService)
     bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService, messagingClient)
     driverService := services.NewDriverService(driverRepo, bookingRepo, authService, messagingClient)

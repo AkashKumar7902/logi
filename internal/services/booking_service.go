@@ -28,7 +28,10 @@ func NewBookingService(repo repositories.BookingRepository, driverRepo repositor
 
 func (s *BookingService) CreateBooking(userID string, bookingReq *models.BookingRequest) (*models.Booking, error) {
     // Calculate price with surge pricing
-    price := s.PricingService.CalculatePrice(bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
+    price, err := s.PricingService.CalculatePrice(bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
+    if err != nil {
+        return nil, errors.New("failed to calculate price")
+    }
 
     booking := &models.Booking{
         ID:             uuid.NewString(),
@@ -62,7 +65,7 @@ func (s *BookingService) CreateBooking(userID string, bookingReq *models.Booking
         })
     }
 
-    err := s.Repo.Create(booking)
+    err = s.Repo.Create(booking)
     if err != nil {
         return nil, err
     }

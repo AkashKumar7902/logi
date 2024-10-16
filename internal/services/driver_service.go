@@ -5,6 +5,7 @@ import (
 	"logi/internal/messaging"
 	"logi/internal/models"
 	"logi/internal/repositories"
+	"logi/internal/utils"
 	"logi/pkg/auth"
 	"time"
 
@@ -12,17 +13,17 @@ import (
 )
 
 type DriverService struct {
-	Repo        repositories.DriverRepository
-	BookingRepo repositories.BookingRepository
-	AuthService *auth.AuthService
+	Repo            repositories.DriverRepository
+	BookingRepo     repositories.BookingRepository
+	AuthService     *auth.AuthService
 	MessagingClient messaging.MessagingClient
 }
 
-func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, authService *auth.AuthService,     messagingClient messaging.MessagingClient) *DriverService {
+func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, authService *auth.AuthService, messagingClient messaging.MessagingClient) *DriverService {
 	return &DriverService{
-		Repo:        repo,
-		AuthService: authService,
-		BookingRepo: bookingRepo,
+		Repo:            repo,
+		AuthService:     authService,
+		BookingRepo:     bookingRepo,
 		MessagingClient: messagingClient,
 	}
 }
@@ -59,8 +60,25 @@ func (s *DriverService) Login(email, password string) (*models.Driver, error) {
 	return driver, nil
 }
 
+// UpdateStatus updates the driver's status and notifies admins
 func (s *DriverService) UpdateStatus(driverID, status string) error {
-	return s.Repo.UpdateStatus(driverID, status)
+	// Update the driver's status in the repository
+	err := s.Repo.UpdateStatus(driverID, status)
+	if err != nil {
+		return err
+	}
+
+	// Publish the status update to admins via MessagingClient
+	publishErr := s.MessagingClient.Publish("", "driver_status_update", map[string]interface{}{
+		"driver_id": driverID,
+		"status":    status,
+	})
+	if publishErr != nil {
+		// Log the error but do not fail the operation
+		utils.Logger.Printf("Failed to publish driver status update: %v", publishErr)
+	}
+
+	return nil
 }
 
 // UpdateBookingStatus updates the status of a booking
@@ -133,25 +151,30 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 }
 
 func (s *DriverService) UpdateLocation(driverID string, latitude, longitude float64) error {
-    err := s.Repo.UpdateLocation(driverID, latitude, longitude)
-    if err != nil {
-        return err
+	location := models.Location{
+        Type:        "Point",
+        Coordinates: []float64{longitude, latitude},
     }
+	
+	err := s.Repo.UpdateLocation(driverID, location)
+	if err != nil {
+		return err
+	}
 
-    // Find current booking for the driver
-    booking, err := s.BookingRepo.FindActiveBookingByDriverID(driverID)
-    if err != nil {
-        return nil // No active booking, no need to notify
-    }
+	// Find current booking for the driver
+	booking, err := s.BookingRepo.FindActiveBookingByDriverID(driverID)
+	if err != nil {
+		return nil // No active booking, no need to notify
+	}
 
-    // Notify user about driver's location update
-    s.MessagingClient.Publish(booking.UserID, "driver_location", map[string]interface{}{
-        "booking_id": booking.ID,
-        "latitude":   latitude,
-        "longitude":  longitude,
-    })
+	// Notify user about driver's location update
+	s.MessagingClient.Publish(booking.UserID, "driver_location", map[string]interface{}{
+		"booking_id": booking.ID,
+		"latitude":   latitude,
+		"longitude":  longitude,
+	})
 
-    return nil
+	return nil
 }
 
 func (s *DriverService) GetAllDrivers() ([]*models.Driver, error) {

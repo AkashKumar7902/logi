@@ -14,6 +14,6 @@ type Driver struct {
 }
 
 type Location struct {
-    Latitude  float64 `bson:"latitude" json:"latitude"`
-    Longitude float64 `bson:"longitude" json:"longitude"`
+    Type        string    `bson:"type" json:"type"`
+    Coordinates []float64 `bson:"coordinates" json:"coordinates"`
 }
