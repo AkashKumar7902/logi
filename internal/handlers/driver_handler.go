@@ -153,3 +153,46 @@ func (h *DriverHandler) UpdateLocation(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"message": "Location updated"})
 }
+
+func (h *DriverHandler) GetPendingBookings(c *gin.Context) {
+    driverID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
+
+    bookings, err := h.Service.GetPendingBookings(driverID.(string))
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, bookings)
+}
+
+func (h *DriverHandler) RespondToBooking(c *gin.Context) {
+    var payload struct {
+        BookingID string `json:"booking_id"`
+        Response  string `json:"response"` // "accept" or "reject"
+    }
+
+    if err := c.BindJSON(&payload); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
+
+    driverID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
+
+    err := h.Service.RespondToBooking(driverID.(string), payload.BookingID, payload.Response)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Response recorded"})
+}
+

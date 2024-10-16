@@ -12,13 +12,14 @@ import (
 type DriverRepository interface {
 	Create(driver *models.Driver) error
 	FindByEmail(email string) (*models.Driver, error)
-	FindAvailableDriver(location models.Location, vehicleType string) (*models.Driver, error)
+	FindAvailableDrivers(location models.Location, vehicleType string) ([]*models.Driver, error)
 	UpdateStatus(driverID string, status string) error
 	GetAvailableDriversCount() (int64, error)
 	GetAllDrivers() ([]*models.Driver, error)
 	FindByID(driverID string) (*models.Driver, error)
 	UpdateDriver(driver *models.Driver) error
 	UpdateLocation(driverID string, location models.Location) error
+    UpdateCurrentBookingID(driverID, bookingID string) error
 }
 
 type driverRepository struct {
@@ -56,24 +57,33 @@ func (r *driverRepository) FindByEmail(email string) (*models.Driver, error) {
 	return &driver, nil
 }
 
-func (r *driverRepository) FindAvailableDriver(location models.Location, vehicleType string) (*models.Driver, error) {
-	filter := bson.M{
-		"status":       "Available",
-		"vehicle_type": vehicleType,
-		"location": bson.M{
-			"$near": bson.M{
-				"$geometry":    location,
-				"$maxDistance": 5000, // Adjust as needed (in meters)
-			},
-		},
-	}
+func (r *driverRepository) FindAvailableDrivers(location models.Location, vehicleType string) ([]*models.Driver, error) {
+    filter := bson.M{
+        "status":        "Available",
+        "vehicle_type":  vehicleType,
+        "location": bson.M{
+            "$near": bson.M{
+                "$geometry":    location,
+                "$maxDistance": 5000, // Adjust as needed (in meters)
+            },
+        },
+    }
 
-	var driver models.Driver
-	err := r.collection.FindOne(context.Background(), filter).Decode(&driver)
-	if err != nil {
-		return nil, err
-	}
-	return &driver, nil
+    cursor, err := r.collection.Find(context.Background(), filter)
+    if err != nil {
+        return nil, err
+    }
+    defer cursor.Close(context.Background())
+
+    var drivers []*models.Driver
+    for cursor.Next(context.Background()) {
+        var driver models.Driver
+        if err := cursor.Decode(&driver); err != nil {
+            continue
+        }
+        drivers = append(drivers, &driver)
+    }
+    return drivers, nil
 }
 
 func (r *driverRepository) UpdateStatus(driverID string, status string) error {
@@ -135,4 +145,13 @@ func (r *driverRepository) UpdateLocation(driverID string, location models.Locat
 		}},
 	)
 	return err
+}
+
+func (r *driverRepository) UpdateCurrentBookingID(driverID, bookingID string) error {
+    _, err := r.collection.UpdateOne(
+        context.Background(),
+        bson.M{"_id": driverID},
+        bson.M{"$set": bson.M{"current_booking_id": bookingID}},
+    )
+    return err
 }

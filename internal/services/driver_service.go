@@ -15,15 +15,17 @@ import (
 type DriverService struct {
 	Repo            repositories.DriverRepository
 	BookingRepo     repositories.BookingRepository
+	BookingService  BookingService
 	AuthService     *auth.AuthService
 	MessagingClient messaging.MessagingClient
 }
 
-func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, authService *auth.AuthService, messagingClient messaging.MessagingClient) *DriverService {
+func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, bookingService BookingService,  authService *auth.AuthService, messagingClient messaging.MessagingClient) *DriverService {
 	return &DriverService{
 		Repo:            repo,
 		AuthService:     authService,
 		BookingRepo:     bookingRepo,
+		BookingService:  bookingService,
 		MessagingClient: messagingClient,
 	}
 }
@@ -187,6 +189,19 @@ func (s *DriverService) GetDriverByID(driverID string) (*models.Driver, error) {
 
 func (s *DriverService) UpdateDriver(driver *models.Driver) error {
 	return s.Repo.UpdateDriver(driver)
+}
+
+func (s *DriverService) GetPendingBookings(driverID string) ([]*models.Booking, error) {
+    return s.BookingRepo.FindAssignedBookings(driverID)
+}
+
+func (s *DriverService) RespondToBooking(driverID, bookingID, response string) error {
+    if response == "accept" {
+        return s.BookingService.DriverAcceptsBooking(driverID, bookingID)
+    } else if response == "reject" {
+        return s.BookingService.DriverRejectsBooking(driverID, bookingID)
+    }
+    return errors.New("invalid response")
 }
 
 // isValidTransition checks if the status transition is valid

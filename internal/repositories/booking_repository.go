@@ -17,6 +17,8 @@ type BookingRepository interface {
     FindPendingScheduledBookings() ([]*models.Booking, error)
     GetActiveBookingsCount() (int64, error)
     GetBookingStatistics() (*models.BookingStatistics, error)
+    FindAssignedBookings(driverID string) ([]*models.Booking, error)
+    UpdateDriverResponseStatus(bookingID, status string) error
 }
 
 type bookingRepository struct {
@@ -147,4 +149,35 @@ func (r *bookingRepository) GetBookingStatistics() (*models.BookingStatistics, e
     }
 
     return stats, nil
+}
+
+func (r *bookingRepository) UpdateDriverResponseStatus(bookingID, status string) error {
+    _, err := r.collection.UpdateOne(
+        context.Background(),
+        bson.M{"_id": bookingID},
+        bson.M{"$set": bson.M{"driver_response_status": status}},
+    )
+    return err
+}
+
+func (r *bookingRepository) FindAssignedBookings(driverID string) ([]*models.Booking, error) {
+    filter := bson.M{
+        "driver_id": driverID,
+        "driver_response_status": "Pending",
+    }
+    cursor, err := r.collection.Find(context.Background(), filter)
+    if err != nil {
+        return nil, err
+    }
+    defer cursor.Close(context.Background())
+
+    var bookings []*models.Booking
+    for cursor.Next(context.Background()) {
+        var booking models.Booking
+        if err := cursor.Decode(&booking); err != nil {
+            continue
+        }
+        bookings = append(bookings, &booking)
+    }
+    return bookings, nil
 }

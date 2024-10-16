@@ -43,6 +43,8 @@ func SetupRouter(
 		driverProtected.POST("/status", driverHandler.UpdateStatus)
 		driverProtected.POST("/booking-status", driverHandler.UpdateBookingStatus)
 		driverProtected.POST("/update-location", driverHandler.UpdateLocation)
+        driverProtected.GET("/pending-bookings", driverHandler.GetPendingBookings)
+        driverProtected.POST("/respond-booking", driverHandler.RespondToBooking)    
 	}
 
 	adminProtected := router.Group("/admin", utils.JWTAuthMiddleware(authService, "admin"))

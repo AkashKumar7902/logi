@@ -15,6 +15,7 @@ type Booking struct {
     ScheduledTime  *time.Time `bson:"scheduled_time,omitempty" json:"scheduled_time,omitempty"`
     StartedAt   *time.Time `bson:"started_at,omitempty" json:"started_at,omitempty"`
     CompletedAt *time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+    DriverResponseStatus string `bson:"driver_response_status" json:"driver_response_status"` // e.g., Pending, Accepted, Rejected
 }
 
 type BookingRequest struct {

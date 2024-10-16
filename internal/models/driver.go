@@ -11,6 +11,7 @@ type Driver struct {
     Location     Location  `bson:"location" json:"location"`
     Status       string    `bson:"status" json:"status"` // Status: Available, Busy, Offline
     CreatedAt    time.Time `bson:"created_at" json:"created_at"`
+    CurrentBookingID string `bson:"current_booking_id,omitempty" json:"current_booking_id,omitempty"`
 }
 
 type Location struct {

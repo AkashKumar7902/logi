@@ -43,7 +43,6 @@ func (hub *WebSocketHub) Run() {
         if conn, ok := hub.userClients[msg.UserID]; ok {
             err := conn.WriteJSON(msg)
 			if err != nil {
-				panic(err)
 				conn.Close()
 				delete(hub.userClients, msg.UserID)
 			}
