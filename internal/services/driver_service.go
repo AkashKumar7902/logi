@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"logi/internal/messaging"
 	"logi/internal/models"
 	"logi/internal/repositories"
 	"logi/pkg/auth"
@@ -14,13 +15,15 @@ type DriverService struct {
 	Repo        repositories.DriverRepository
 	BookingRepo repositories.BookingRepository
 	AuthService *auth.AuthService
+	MessagingClient messaging.MessagingClient
 }
 
-func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, authService *auth.AuthService) *DriverService {
+func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, authService *auth.AuthService,     messagingClient messaging.MessagingClient) *DriverService {
 	return &DriverService{
 		Repo:        repo,
 		AuthService: authService,
 		BookingRepo: bookingRepo,
+		MessagingClient: messagingClient,
 	}
 }
 
@@ -88,22 +91,22 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 	}
 
 	// Update timestamps based on status
-    currentTime := time.Now()
-    switch status {
-    case "In Transit":
-        if booking.StartedAt == nil {
-            booking.StartedAt = &currentTime
-        }
-    case "Completed":
-        if booking.CompletedAt == nil {
-            booking.CompletedAt = &currentTime
-        }
-    }
+	currentTime := time.Now()
+	switch status {
+	case "In Transit":
+		if booking.StartedAt == nil {
+			booking.StartedAt = &currentTime
+		}
+	case "Completed":
+		if booking.CompletedAt == nil {
+			booking.CompletedAt = &currentTime
+		}
+	}
 
-    err = s.BookingRepo.Update(booking)
-    if err != nil {
-        return err
-    }
+	err = s.BookingRepo.Update(booking)
+	if err != nil {
+		return err
+	}
 
 	// Update the booking status
 	booking.Status = status
@@ -111,6 +114,12 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 	if err != nil {
 		return err
 	}
+
+	// Notify user about status update
+	s.MessagingClient.Publish(booking.UserID, "status_update", map[string]interface{}{
+		"booking_id": booking.ID,
+		"status":     status,
+	})
 
 	// If booking is marked as completed, update driver's status to Available
 	if status == "Completed" {
@@ -123,16 +132,38 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 	return nil
 }
 
+func (s *DriverService) UpdateLocation(driverID string, latitude, longitude float64) error {
+    err := s.Repo.UpdateLocation(driverID, latitude, longitude)
+    if err != nil {
+        return err
+    }
+
+    // Find current booking for the driver
+    booking, err := s.BookingRepo.FindActiveBookingByDriverID(driverID)
+    if err != nil {
+        return nil // No active booking, no need to notify
+    }
+
+    // Notify user about driver's location update
+    s.MessagingClient.Publish(booking.UserID, "driver_location", map[string]interface{}{
+        "booking_id": booking.ID,
+        "latitude":   latitude,
+        "longitude":  longitude,
+    })
+
+    return nil
+}
+
 func (s *DriverService) GetAllDrivers() ([]*models.Driver, error) {
-    return s.Repo.GetAllDrivers()
+	return s.Repo.GetAllDrivers()
 }
 
 func (s *DriverService) GetDriverByID(driverID string) (*models.Driver, error) {
-    return s.Repo.FindByID(driverID)
+	return s.Repo.FindByID(driverID)
 }
 
 func (s *DriverService) UpdateDriver(driver *models.Driver) error {
-    return s.Repo.UpdateDriver(driver)
+	return s.Repo.UpdateDriver(driver)
 }
 
 // isValidTransition checks if the status transition is valid

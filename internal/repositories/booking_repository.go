@@ -13,6 +13,7 @@ type BookingRepository interface {
     Create(booking *models.Booking) error
     Update(booking *models.Booking) error
     FindByID(id string) (*models.Booking, error)
+    FindActiveBookingByDriverID(driverID string) (*models.Booking, error)
     FindPendingScheduledBookings() ([]*models.Booking, error)
     GetActiveBookingsCount() (int64, error)
     GetBookingStatistics() (*models.BookingStatistics, error)
@@ -44,6 +45,26 @@ func (r *bookingRepository) Update(booking *models.Booking) error {
 func (r *bookingRepository) FindByID(id string) (*models.Booking, error) {
     var booking models.Booking
     err := r.collection.FindOne(context.Background(), bson.M{"_id": id}).Decode(&booking)
+    if err != nil {
+        return nil, err
+    }
+    return &booking, nil
+}
+
+func (r *bookingRepository) FindActiveBookingByDriverID(driverID string) (*models.Booking, error) {
+    var booking models.Booking
+    filter := bson.M{
+        "driver_id": driverID,
+        "status": bson.M{
+            "$in": []string{
+                "Driver Assigned",
+                "En Route to Pickup",
+                "Goods Collected",
+                "In Transit",
+            },
+        },
+    }
+    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
     if err != nil {
         return nil, err
     }

@@ -1,1 +1,7 @@
-.
+server_address: ":8080"
+mongo_uri: "mongodb://localhost:27017"
+jwt_secret: "hey"
+
+# Messaging configuration
+messaging_type: "websocket" # or "nats"
+nats_url: "nats://localhost:4222" # Required if messaging_type is "nats"

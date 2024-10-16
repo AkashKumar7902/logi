@@ -127,3 +127,29 @@ func (h *DriverHandler) UpdateBookingStatus(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"message": "Booking status updated successfully"})
 }
+
+func (h *DriverHandler) UpdateLocation(c *gin.Context) {
+    var payload struct {
+        Latitude  float64 `json:"latitude"`
+        Longitude float64 `json:"longitude"`
+    }
+
+    if err := c.BindJSON(&payload); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
+
+    driverID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
+
+    err := h.Service.UpdateLocation(driverID.(string), payload.Latitude, payload.Longitude)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Location updated"})
+}

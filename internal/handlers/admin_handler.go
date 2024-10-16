@@ -80,7 +80,6 @@ func (h *AdminHandler) Login(c *gin.Context) {
 }
 
 // Fleet Management Endpoints
-
 func (h *AdminHandler) GetAllDrivers(c *gin.Context) {
     drivers, err := h.DriverService.GetAllDrivers()
     if err != nil {
@@ -115,8 +114,6 @@ func (h *AdminHandler) UpdateDriver(c *gin.Context) {
     }
     c.JSON(http.StatusOK, gin.H{"message": "Driver updated successfully"})
 }
-
-// Data Analytics Endpoint
 
 func (h *AdminHandler) GetAnalytics(c *gin.Context) {
     stats, err := h.BookingService.GetBookingStatistics()

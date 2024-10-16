@@ -18,6 +18,7 @@ type DriverRepository interface {
     GetAllDrivers() ([]*models.Driver, error)
     FindByID(driverID string) (*models.Driver, error)
     UpdateDriver(driver *models.Driver) error
+    UpdateLocation(driverID string, latitude, longitude float64) error
 }
 
 type driverRepository struct {
@@ -105,6 +106,18 @@ func (r *driverRepository) UpdateDriver(driver *models.Driver) error {
         context.Background(),
         bson.M{"_id": driver.ID},
         bson.M{"$set": driver},
+    )
+    return err
+}
+
+func (r *driverRepository) UpdateLocation(driverID string, latitude, longitude float64) error {
+    _, err := r.collection.UpdateOne(
+        context.Background(),
+        bson.M{"_id": driverID},
+        bson.M{"$set": bson.M{
+            "location.latitude":  latitude,
+            "location.longitude": longitude,
+        }},
     )
     return err
 }

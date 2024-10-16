@@ -1,25 +1,28 @@
 package services
 
 import (
-    "errors"
-    "logi/internal/models"
-    "logi/internal/repositories"
-    "time"
+	"errors"
+	"logi/internal/messaging"
+	"logi/internal/models"
+	"logi/internal/repositories"
+	"time"
 
-    "github.com/google/uuid"
+	"github.com/google/uuid"
 )
 
 type BookingService struct {
     Repo           repositories.BookingRepository
     DriverRepo     repositories.DriverRepository
     PricingService *PricingService
+    MessagingClient messaging.MessagingClient
 }
 
-func NewBookingService(repo repositories.BookingRepository, driverRepo repositories.DriverRepository, pricingService *PricingService) *BookingService {
+func NewBookingService(repo repositories.BookingRepository, driverRepo repositories.DriverRepository, pricingService *PricingService, messagingClient messaging.MessagingClient) *BookingService {
     return &BookingService{
         Repo:           repo,
         DriverRepo:     driverRepo,
         PricingService: pricingService,
+        MessagingClient: messagingClient,
     }
 }
 
@@ -51,6 +54,12 @@ func (s *BookingService) CreateBooking(userID string, bookingReq *models.Booking
 
         // Update driver status
         s.DriverRepo.UpdateStatus(driver.ID, "Busy")
+
+        // Notify user about driver assignment
+        s.MessagingClient.Publish(userID, "driver_assigned", map[string]interface{}{
+            "booking_id": booking.ID,
+            "driver_id":  driver.ID,
+        })
     }
 
     err := s.Repo.Create(booking)
@@ -79,6 +88,12 @@ func (s *BookingService) ActivateScheduledBookings() error {
         // Update booking and driver status
         s.Repo.Update(booking)
         s.DriverRepo.UpdateStatus(driver.ID, "Busy")
+
+        // Notify user about driver assignment
+        s.MessagingClient.Publish(booking.UserID, "driver_assigned", map[string]interface{}{
+            "booking_id": booking.ID,
+            "driver_id":  driver.ID,
+        })
     }
 
     return nil

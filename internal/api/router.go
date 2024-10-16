@@ -14,6 +14,7 @@ func SetupRouter(
     driverHandler *handlers.DriverHandler,
     adminHandler *handlers.AdminHandler,
     authService *auth.AuthService,
+    wsHub *utils.WebSocketHub,
 ) *gin.Engine {
     router := gin.Default()
 
@@ -25,6 +26,11 @@ func SetupRouter(
     router.POST("/admins/register", adminHandler.Register)
     router.POST("/admins/login", adminHandler.Login)
 
+    router.GET("/ws", func(c *gin.Context) {
+        utils.ServeWs(authService, wsHub, c)
+    })
+
+
     // Protected routes with JWT middleware
     userProtected := router.Group("/", utils.JWTAuthMiddleware(authService, "user"))
     {
@@ -35,6 +41,7 @@ func SetupRouter(
     {
         driverProtected.POST("/status", driverHandler.UpdateStatus)
         driverProtected.POST("/booking-status", driverHandler.UpdateBookingStatus)
+        driverProtected.POST("/update-location", driverHandler.UpdateLocation)
     }
 
     adminProtected := router.Group("/admin", utils.JWTAuthMiddleware(authService, "admin"))
