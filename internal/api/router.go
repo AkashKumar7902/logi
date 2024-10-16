@@ -35,6 +35,7 @@ func SetupRouter(
     userProtected := router.Group("/", utils.JWTAuthMiddleware(authService, "user"))
     {
         userProtected.POST("/bookings", bookingHandler.CreateBooking)
+        userProtected.POST("/bookings/estimate", bookingHandler.GetPriceEstimate)
     }
 
     driverProtected := router.Group("/drivers", utils.JWTAuthMiddleware(authService, "driver"))

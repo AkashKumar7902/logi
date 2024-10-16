@@ -37,3 +37,28 @@ func (h *BookingHandler) CreateBooking(c *gin.Context) {
 
     c.JSON(http.StatusCreated, booking)
 }
+
+func (h *BookingHandler) GetPriceEstimate(c *gin.Context) {
+    var estimateReq models.PriceEstimateRequest
+
+    // Bind and validate the JSON input
+    if err := c.ShouldBindJSON(&estimateReq); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+        return
+    }
+
+    // Call the service to get the price estimate
+    estimatedPrice, err := h.Service.GetPriceEstimate(&estimateReq)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate price estimate"})
+        return
+    }
+
+    // Prepare the response
+    response := models.PriceEstimateResponse{
+        EstimatedPrice: estimatedPrice,
+    }
+
+    // Return the estimated price
+    c.JSON(http.StatusOK, response)
+}

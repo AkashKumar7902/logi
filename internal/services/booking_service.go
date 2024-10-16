@@ -105,3 +105,15 @@ func (s *BookingService) ActivateScheduledBookings() error {
 func (s *BookingService) GetBookingStatistics() (*models.BookingStatistics, error) {
     return s.Repo.GetBookingStatistics()
 }
+
+func (s *BookingService) GetPriceEstimate(bookingReq *models.PriceEstimateRequest) (float64, error) {
+    price, err := s.PricingService.CalculatePrice(
+        bookingReq.PickupLocation,
+        bookingReq.DropoffLocation,
+        bookingReq.VehicleType,
+    )
+    if err != nil {
+        return 0, err
+    }
+    return price, nil
+}
