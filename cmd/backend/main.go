@@ -53,6 +53,8 @@ func main() {
 	bookingRepo := repositories.NewBookingRepository(dbClient)
 	driverRepo := repositories.NewDriverRepository(dbClient)
 	adminRepo := repositories.NewAdminRepository(dbClient)
+	vehicleRepo := repositories.NewVehicleRepository(dbClient)
+
 
 	// Initialize DistanceCalculator based on configuration
 	var distanceCalc distance.DistanceCalculator
@@ -67,14 +69,15 @@ func main() {
 	pricingService := services.NewPricingService(bookingRepo, driverRepo, distanceCalc)
 	userService := services.NewUserService(userRepo, authService)
     bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService, messagingClient)
-    driverService := services.NewDriverService(driverRepo, bookingRepo, authService, messagingClient)
+    driverService := services.NewDriverService(driverRepo, bookingRepo, *bookingService, authService, messagingClient)
 	adminService := services.NewAdminService(adminRepo, authService)
+	vehicleService := services.NewVehicleService(vehicleRepo)
 
 	// Initialize handlers and pass the auth service where needed
 	userHandler := handlers.NewUserHandler(userService, authService)
 	bookingHandler := handlers.NewBookingHandler(bookingService)
 	driverHandler := handlers.NewDriverHandler(driverService, authService)
-	adminHandler := handlers.NewAdminHandler(adminService, authService, userService, driverService, bookingService)
+    adminHandler := handlers.NewAdminHandler(adminService, authService, userService, driverService, bookingService, vehicleService)
 
 	// Initialize router
 	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService, wsHub)

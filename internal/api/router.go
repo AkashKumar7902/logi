@@ -52,7 +52,16 @@ func SetupRouter(
 		adminProtected.GET("/drivers", adminHandler.GetAllDrivers)
 		adminProtected.GET("/drivers/:driverID", adminHandler.GetDriver)
 		adminProtected.PUT("/drivers/:driverID", adminHandler.UpdateDriver)
+        
 		adminProtected.GET("/analytics", adminHandler.GetAnalytics)
+
+        // Vehicle management routes
+        adminProtected.POST("/vehicles", adminHandler.CreateVehicle)
+        adminProtected.GET("/vehicles", adminHandler.GetAllVehicles)
+        adminProtected.GET("/vehicles/:vehicleID", adminHandler.GetVehicle)
+        adminProtected.PUT("/vehicles/:vehicleID", adminHandler.UpdateVehicle)
+        adminProtected.DELETE("/vehicles/:vehicleID", adminHandler.DeleteVehicle)
+        
 	}
 
 	return router

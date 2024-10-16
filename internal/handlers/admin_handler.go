@@ -15,15 +15,17 @@ type AdminHandler struct {
     UserService    *services.UserService
     DriverService  *services.DriverService
     BookingService *services.BookingService
+    VehicleService   *services.VehicleService
 }
 
-func NewAdminHandler(service *services.AdminService, authService *auth.AuthService, userService *services.UserService, driverService *services.DriverService, bookingService *services.BookingService) *AdminHandler {
+func NewAdminHandler(service *services.AdminService, authService *auth.AuthService, userService *services.UserService, driverService *services.DriverService, bookingService *services.BookingService, vehicleService *services.VehicleService) *AdminHandler {
     return &AdminHandler{
         Service:        service,
         AuthService:    authService,
         UserService:    userService,
         DriverService:  driverService,
         BookingService: bookingService,
+        VehicleService:   vehicleService,
     }
 }
 
@@ -113,6 +115,68 @@ func (h *AdminHandler) UpdateDriver(c *gin.Context) {
         return
     }
     c.JSON(http.StatusOK, gin.H{"message": "Driver updated successfully"})
+}
+
+// Vehicle Management Endpoints
+
+func (h *AdminHandler) CreateVehicle(c *gin.Context) {
+    var vehicle models.Vehicle
+    if err := c.BindJSON(&vehicle); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
+
+    err := h.VehicleService.CreateVehicle(&vehicle)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create vehicle"})
+        return
+    }
+    c.JSON(http.StatusCreated, gin.H{"message": "Vehicle created successfully", "vehicle": vehicle})
+}
+
+func (h *AdminHandler) UpdateVehicle(c *gin.Context) {
+    vehicleID := c.Param("vehicleID")
+    var vehicle models.Vehicle
+    if err := c.BindJSON(&vehicle); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
+    vehicle.ID = vehicleID
+    err := h.VehicleService.UpdateVehicle(&vehicle)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Vehicle updated successfully", "vehicle": vehicle})
+}
+
+func (h *AdminHandler) DeleteVehicle(c *gin.Context) {
+    vehicleID := c.Param("vehicleID")
+    err := h.VehicleService.DeleteVehicle(vehicleID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete vehicle"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Vehicle deleted successfully"})
+}
+
+func (h *AdminHandler) GetVehicle(c *gin.Context) {
+    vehicleID := c.Param("vehicleID")
+    vehicle, err := h.VehicleService.GetVehicleByID(vehicleID)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+        return
+    }
+    c.JSON(http.StatusOK, vehicle)
+}
+
+func (h *AdminHandler) GetAllVehicles(c *gin.Context) {
+    vehicles, err := h.VehicleService.GetAllVehicles()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch vehicles"})
+        return
+    }
+    c.JSON(http.StatusOK, vehicles)
 }
 
 func (h *AdminHandler) GetAnalytics(c *gin.Context) {

@@ -7,7 +7,7 @@ type Driver struct {
     Name         string    `bson:"name" json:"name"`
     Email        string    `bson:"email" json:"email"`
     PasswordHash string    `bson:"password_hash" json:"-"`
-    VehicleType  string    `bson:"vehicle_type" json:"vehicle_type"`
+    VehicleID       string    `bson:"vehicle_id,omitempty" json:"vehicle_id,omitempty"`
     Location     Location  `bson:"location" json:"location"`
     Status       string    `bson:"status" json:"status"` // Status: Available, Busy, Offline
     CreatedAt    time.Time `bson:"created_at" json:"created_at"`
