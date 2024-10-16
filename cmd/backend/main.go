@@ -11,6 +11,7 @@ import (
 	"logi/internal/utils"
 	"logi/pkg/auth"
 	"logi/pkg/scheduler"
+	"logi/pkg/websocket"
 )
 
 func main() {
@@ -30,7 +31,7 @@ func main() {
 	// Initialize the AuthService with the JWT secret
 	authService := auth.NewAuthService(config.JWTSecret)
 
-	wsHub := utils.NewWebSocketHub()
+	wsHub := websocket.NewWebSocketHub()
 	go wsHub.Run()
 
     // Initialize MessagingClient based on configuration

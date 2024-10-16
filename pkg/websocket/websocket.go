@@ -1,5 +1,4 @@
-// internal/utils/websocket.go
-package utils
+package websocket
 
 import (
     "sync"

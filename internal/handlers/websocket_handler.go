@@ -1,21 +1,22 @@
-// internal/utils/websocket_handler.go
-package utils
+package handlers
 
 import (
-    "logi/pkg/auth"
-    "net/http"
+	"logi/pkg/auth"
+	"net/http"
 
-    "github.com/gin-gonic/gin"
-    "github.com/gorilla/websocket"
+	"github.com/gin-gonic/gin"
+	websk "github.com/gorilla/websocket"
+    "logi/pkg/websocket"
+
 )
 
-var upgrader = websocket.Upgrader{
+var upgrader = websk.Upgrader{
     CheckOrigin: func(r *http.Request) bool {
         return true // Allow all origins for simplicity; adjust as needed
     },
 }
 
-func ServeWs(authService *auth.AuthService, hub *WebSocketHub, c *gin.Context) {
+func ServeWs(authService *auth.AuthService, hub *websocket.WebSocketHub, c *gin.Context) {
     tokenString := c.Query("token")
     if tokenString == "" {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Token query parameter missing"})

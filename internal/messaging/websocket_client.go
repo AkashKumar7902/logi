@@ -1,18 +1,18 @@
 // internal/messaging/websocket_client.go
 package messaging
 
-import "logi/internal/utils"
+import "logi/pkg/websocket"
 
 type WebSocketClient struct {
-    Hub *utils.WebSocketHub
+    Hub *websocket.WebSocketHub
 }
 
-func NewWebSocketClient(hub *utils.WebSocketHub) *WebSocketClient {
+func NewWebSocketClient(hub *websocket.WebSocketHub) *WebSocketClient {
     return &WebSocketClient{Hub: hub}
 }
 
 func (w *WebSocketClient) Publish(userID string, messageType string, payload interface{}) error {
-    message := utils.WebSocketMessage{
+    message := websocket.WebSocketMessage{
         UserID:  userID,
         Type:    messageType,
         Payload: payload,
