@@ -31,6 +31,7 @@ func (s *BookingService) CreateBooking(userID string, bookingReq *models.Booking
     // Calculate price with surge pricing
     price, err := s.PricingService.CalculatePrice(bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
     if err != nil {
+        utils.Logger.Println("failed to calculate price")
         return nil, errors.New("failed to calculate price")
     }
 
@@ -77,11 +78,13 @@ func (s *BookingService) AssignBookingToDrivers(booking *models.Booking) error {
     )
 
     if err != nil || len(drivers) == 0 {
+        utils.Logger.Println("no available drivers")
         return errors.New("no available drivers")
     }
 
     for _, driver := range drivers {
         // Notify each driver
+        utils.Logger.Println("sending booking request to driver", driver.ID)
         err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
         if err != nil {
             // Handle messaging errors

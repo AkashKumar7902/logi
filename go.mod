@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/gin-contrib/cors v1.7.2 // indirect
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 )

@@ -1,12 +1,13 @@
 package repositories
 
 import (
-    "context"
-    "logi/internal/models"
-    "time"
+	"context"
+	"logi/internal/models"
+	"logi/internal/utils"
+	"time"
 
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type BookingRepository interface {
@@ -19,6 +20,9 @@ type BookingRepository interface {
     GetBookingStatistics() (*models.BookingStatistics, error)
     FindAssignedBookings(driverID string) ([]*models.Booking, error)
     UpdateDriverResponseStatus(bookingID, status string) error
+    GetActiveBookingsByDriverID(driverID string) ([]*models.Booking, error)
+    GetActiveBookingByUserID(userID string) (*models.Booking, error)
+    FindByIDAndDriverID(id string, driverID string) (*models.Booking, error) // New Method
 }
 
 type bookingRepository struct {
@@ -31,6 +35,7 @@ func NewBookingRepository(dbClient *mongo.Client) BookingRepository {
 }
 
 func (r *bookingRepository) Create(booking *models.Booking) error {
+    utils.Logger.Println("creating booking")
     _, err := r.collection.InsertOne(context.Background(), booking)
     return err
 }
@@ -180,4 +185,56 @@ func (r *bookingRepository) FindAssignedBookings(driverID string) ([]*models.Boo
         bookings = append(bookings, &booking)
     }
     return bookings, nil
+}
+
+func (r *bookingRepository) GetActiveBookingByUserID(userID string) (*models.Booking, error) {
+    filter := bson.M{
+        "user_id": userID,
+        "status": bson.M{
+            "$nin": []string{"Completed", "Pending"},
+        },
+    }
+    var booking models.Booking
+    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
+    if err != nil {
+        return nil, err
+    }
+    return &booking, nil
+}
+
+func (r *bookingRepository) GetActiveBookingsByDriverID(driverID string) ([]*models.Booking, error) {
+    filter := bson.M{
+        "driver_id": driverID,
+        "status": bson.M{
+            "$nin": []string{"Completed", "Pending"},
+        },
+    }
+    cursor, err := r.collection.Find(context.Background(), filter)
+    if err != nil {
+        return nil, err
+    }
+    defer cursor.Close(context.Background())
+
+    var bookings []*models.Booking
+    for cursor.Next(context.Background()) {
+        var booking models.Booking
+        if err := cursor.Decode(&booking); err != nil {
+            continue
+        }
+        bookings = append(bookings, &booking)
+    }
+    return bookings, nil
+}
+
+func (r *bookingRepository) FindByIDAndDriverID(id string, driverID string) (*models.Booking, error) {
+    var booking models.Booking
+    filter := bson.M{
+        "_id":       id,
+        "driver_id": driverID,
+    }
+    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
+    if err != nil {
+        return nil, err
+    }
+    return &booking, nil
 }

@@ -10,21 +10,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type DriverService struct {
 	Repo            repositories.DriverRepository
 	BookingRepo     repositories.BookingRepository
+	UserRepo        repositories.UserRepository
 	BookingService  BookingService
 	AuthService     *auth.AuthService
 	MessagingClient messaging.MessagingClient
 }
 
-func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, bookingService BookingService,  authService *auth.AuthService, messagingClient messaging.MessagingClient) *DriverService {
+func NewDriverService(repo repositories.DriverRepository, bookingRepo repositories.BookingRepository, userRepo repositories.UserRepository, bookingService BookingService, authService *auth.AuthService, messagingClient messaging.MessagingClient) *DriverService {
 	return &DriverService{
 		Repo:            repo,
 		AuthService:     authService,
 		BookingRepo:     bookingRepo,
+		UserRepo:        userRepo,
 		BookingService:  bookingService,
 		MessagingClient: messagingClient,
 	}
@@ -154,10 +157,10 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 
 func (s *DriverService) UpdateLocation(driverID string, latitude, longitude float64) error {
 	location := models.Location{
-        Type:        "Point",
-        Coordinates: []float64{longitude, latitude},
-    }
-	
+		Type:        "Point",
+		Coordinates: []float64{longitude, latitude},
+	}
+
 	err := s.Repo.UpdateLocation(driverID, location)
 	if err != nil {
 		return err
@@ -192,16 +195,64 @@ func (s *DriverService) UpdateDriver(driver *models.Driver) error {
 }
 
 func (s *DriverService) GetPendingBookings(driverID string) ([]*models.Booking, error) {
-    return s.BookingRepo.FindAssignedBookings(driverID)
+	return s.BookingRepo.FindAssignedBookings(driverID)
 }
 
 func (s *DriverService) RespondToBooking(driverID, bookingID, response string) error {
-    if response == "accept" {
-        return s.BookingService.DriverAcceptsBooking(driverID, bookingID)
-    } else if response == "reject" {
-        return s.BookingService.DriverRejectsBooking(driverID, bookingID)
-    }
-    return errors.New("invalid response")
+	if response == "accept" {
+		return s.BookingService.DriverAcceptsBooking(driverID, bookingID)
+	} else if response == "reject" {
+		return s.BookingService.DriverRejectsBooking(driverID, bookingID)
+	}
+	return errors.New("invalid response")
+}
+
+func (s *DriverService) GetActiveBookings(driverID string) ([]*models.Booking, error) {
+	// Fetch bookings assigned to the driver that are not 'Completed' or 'Pending'
+	bookings, err := s.BookingRepo.GetActiveBookingsByDriverID(driverID)
+	if err != nil {
+		return nil, err
+	}
+	return bookings, nil
+}
+
+func (s *DriverService) GetUserForBooking(driverID, bookingID string) (*models.User, error) {
+	// Fetch the booking
+	booking, err := s.BookingRepo.FindByID(bookingID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the booking is assigned to the driver
+	if booking.DriverID != driverID {
+		return nil, errors.New("unauthorized access to booking")
+	}
+
+	// Fetch the user who made the booking
+	user, err := s.UserRepo.FindByID(booking.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *DriverService) GetDriverInfo(driverID string) (*models.Driver, error) {
+	driver, err := s.Repo.FindByID(driverID)
+	if err != nil {
+		return nil, err
+	}
+	return driver, nil
+}
+
+func (s *DriverService) GetBooking(driverID, bookingID string) (*models.Booking, error) {
+	booking, err := s.BookingRepo.FindByIDAndDriverID(bookingID, driverID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.New("booking not found or not assigned to the driver")
+		}
+		return nil, err
+	}
+	return booking, nil
 }
 
 // isValidTransition checks if the status transition is valid

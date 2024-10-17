@@ -11,6 +11,7 @@ import (
 type UserRepository interface {
     Create(user *models.User) error
     FindByEmail(email string) (*models.User, error)
+    FindByID(userID string) (*models.User, error)
 }
 
 type userRepository struct {
@@ -30,6 +31,15 @@ func (r *userRepository) Create(user *models.User) error {
 func (r *userRepository) FindByEmail(email string) (*models.User, error) {
     var user models.User
     err := r.collection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+    if err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+func (r *userRepository) FindByID(userID string) (*models.User, error) {
+    var user models.User
+    err := r.collection.FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
     if err != nil {
         return nil, err
     }

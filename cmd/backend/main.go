@@ -67,9 +67,9 @@ func main() {
 
 	// Initialize services
 	pricingService := services.NewPricingService(bookingRepo, driverRepo, distanceCalc)
-	userService := services.NewUserService(userRepo, authService)
+	userService := services.NewUserService(userRepo, bookingRepo, driverRepo, authService)
     bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService, messagingClient)
-    driverService := services.NewDriverService(driverRepo, bookingRepo, *bookingService, authService, messagingClient)
+    driverService := services.NewDriverService(driverRepo, bookingRepo, userRepo, *bookingService, authService, messagingClient)
 	adminService := services.NewAdminService(adminRepo, authService)
 	vehicleService := services.NewVehicleService(vehicleRepo)
 
@@ -79,8 +79,11 @@ func main() {
 	driverHandler := handlers.NewDriverHandler(driverService, authService)
     adminHandler := handlers.NewAdminHandler(adminService, authService, userService, driverService, bookingService, vehicleService)
 
+	// Initialize TestHandler
+	testHandler := handlers.NewTestHandler(messagingClient)
+
 	// Initialize router
-	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService, wsHub)
+	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService, wsHub, testHandler)
 
 	// Start Scheduler
 	scheduler.StartScheduler(bookingService)

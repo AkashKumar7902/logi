@@ -44,7 +44,14 @@ func NewDriverRepository(dbClient *mongo.Client) DriverRepository {
 }
 
 func (r *driverRepository) Create(driver *models.Driver) error {
+	if driver.Location.Type == "" || driver.Location.Coordinates == nil {
+		driver.Location = models.Location{
+			Type:        "Point",
+			Coordinates: []float64{0, 0}, // Default to valid values.
+		}
+	}	
 	_, err := r.collection.InsertOne(context.Background(), driver)
+	utils.Logger.Println(err)
 	return err
 }
 
@@ -58,13 +65,15 @@ func (r *driverRepository) FindByEmail(email string) (*models.Driver, error) {
 }
 
 func (r *driverRepository) FindAvailableDrivers(location models.Location, vehicleType string) ([]*models.Driver, error) {
-    filter := bson.M{
+	utils.Logger.Println(location)
+	
+	filter := bson.M{
         "status":        "Available",
         "vehicle_type":  vehicleType,
         "location": bson.M{
             "$near": bson.M{
                 "$geometry":    location,
-                "$maxDistance": 5000, // Adjust as needed (in meters)
+                "$maxDistance": 10000000, // Adjust as needed (in meters)
             },
         },
     }

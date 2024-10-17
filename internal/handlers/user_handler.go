@@ -72,3 +72,26 @@ func (h *UserHandler) Login(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"token": token})
 }
+
+func (h *UserHandler) GetActiveBooking(c *gin.Context) {
+    userID := c.GetString("userID")
+
+    booking, err := h.Service.GetActiveBooking(userID)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "No active booking found"})
+        return
+    }
+    c.JSON(http.StatusOK, booking)
+}
+
+func (h *UserHandler) GetDriverForBooking(c *gin.Context) {
+    userID := c.GetString("userID")
+    bookingID := c.Param("bookingID")
+
+    driver, err := h.Service.GetDriverForBooking(userID, bookingID)
+    if err != nil {
+        c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, driver)
+}

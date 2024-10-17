@@ -12,12 +12,15 @@ import (
 
 type UserService struct {
     Repo        repositories.UserRepository
+    BookingRepo repositories.BookingRepository
+    DriverRepo  repositories.DriverRepository
     AuthService *auth.AuthService
 }
 
-func NewUserService(repo repositories.UserRepository, authService *auth.AuthService) *UserService {
+func NewUserService(repo repositories.UserRepository, bookingRepo repositories.BookingRepository, driverRepo repositories.DriverRepository, authService *auth.AuthService) *UserService {
     return &UserService{
         Repo:        repo,
+        BookingRepo: bookingRepo,
         AuthService: authService,
     }
 }
@@ -52,4 +55,33 @@ func (s *UserService) Login(email, password string) (*models.User, error) {
     }
 
     return user, nil
+}
+
+func (s *UserService) GetActiveBooking(userID string) (*models.Booking, error) {
+    // Fetch bookings that are not 'Completed' or 'Pending'
+    booking, err := s.BookingRepo.GetActiveBookingByUserID(userID)
+    if err != nil {
+        return nil, err
+    }
+    return booking, nil
+}
+
+func (s *UserService) GetDriverForBooking(userID, bookingID string) (*models.Driver, error) {
+    // Fetch the booking
+    booking, err := s.BookingRepo.FindByID(bookingID)
+    if err != nil {
+        return nil, err
+    }
+
+    // Check if the booking belongs to the user
+    if booking.UserID != userID {
+        return nil, errors.New("unauthorized access to booking")
+    }
+
+    // Fetch the driver assigned to the booking
+    driver, err := s.DriverRepo.FindByID(booking.DriverID)
+    if err != nil {
+        return nil, err
+    }
+    return driver, nil
 }
