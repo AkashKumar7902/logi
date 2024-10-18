@@ -2,7 +2,7 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    - cron: "*/14 * * * *" # Runs every 14 minutes
+    - cron: "*/1 * * * *" # Runs every 14 minutes
   workflow_dispatch: # Optional: Allow manual trigger from GitHub
 
 jobs:
