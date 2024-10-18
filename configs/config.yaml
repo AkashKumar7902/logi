@@ -1,5 +1,5 @@
 server_address: ":8080"
-mongo_uri: "mongodb://localhost:27017"
+mongo_uri: "mongodb+srv://Akash:meakash7902@cluster0.sjlpojg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 jwt_secret: "hey"
 
 # Messaging configuration
