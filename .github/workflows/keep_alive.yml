@@ -1,0 +1,24 @@
+name: Keep Backend Alive
+
+on:
+  schedule:
+    - cron: "*/14 * * * *" # Runs every 14 minutes
+  workflow_dispatch: # Optional: Allow manual trigger from GitHub
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16' # or any required version
+
+    - name: Run keep-alive script
+      run: |
+        npm install cron
+        node cron.js
