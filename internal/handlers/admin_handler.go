@@ -179,11 +179,12 @@ func (h *AdminHandler) GetAllVehicles(c *gin.Context) {
     c.JSON(http.StatusOK, vehicles)
 }
 
-func (h *AdminHandler) GetAnalytics(c *gin.Context) {
-    stats, err := h.BookingService.GetBookingStatistics()
+func (h *AdminHandler) GetStatistics(c *gin.Context) {
+    stats, err := h.Service.GetStatistics()
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch analytics"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve statistics"})
         return
     }
+
     c.JSON(http.StatusOK, stats)
 }

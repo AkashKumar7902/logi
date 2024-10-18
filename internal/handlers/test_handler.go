@@ -65,5 +65,11 @@ func (h *TestHandler) PublishTestMessages(c *gin.Context) {
 		return
 	}
 
+	err = h.MessagingClient.Publish("b8fe009c-7cf4-435f-9161-59a0f954c5c4", "new_booking_request", map[string]interface{}{"booking_id": "booking123"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to publish new booking request"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Test messages published successfully"})
 }

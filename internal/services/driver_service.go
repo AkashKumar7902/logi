@@ -48,6 +48,9 @@ func (s *DriverService) Register(driver *models.Driver, password string) error {
 	driver.PasswordHash = hashedPassword
 	driver.Status = "Available"
 	driver.CreatedAt = time.Now()
+	driver.AcceptedBookingsCount = 0
+	driver.TotalBookingsCount = 0
+	driver.CompletedBookingsCount = 0
 
 	return s.Repo.Create(driver)
 }
@@ -122,6 +125,7 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 		}
 	case "Completed":
 		if booking.CompletedAt == nil {
+			s.Repo.IncrementCompletedBookings(driverID)
 			booking.CompletedAt = &currentTime
 		}
 	}
@@ -199,6 +203,11 @@ func (s *DriverService) GetPendingBookings(driverID string) ([]*models.Booking, 
 }
 
 func (s *DriverService) RespondToBooking(driverID, bookingID, response string) error {
+	err := s.Repo.IncrementTotalBookings(driverID)
+	if err != nil {
+		// Log the error but do not fail the operation
+		utils.Logger.Printf("Failed to increment total bookings for driver %s: %v", driverID, err)
+	}
 	if response == "accept" {
 		return s.BookingService.DriverAcceptsBooking(driverID, bookingID)
 	} else if response == "reject" {

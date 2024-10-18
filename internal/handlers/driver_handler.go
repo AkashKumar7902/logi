@@ -175,7 +175,7 @@ func (h *DriverHandler) RespondToBooking(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error() + "Invalid input"})
 		return
 	}
 
@@ -230,27 +230,27 @@ func (h *DriverHandler) GetDriverInfo(c *gin.Context) {
 
 // GetBooking retrieves a specific booking by ID for the authenticated driver.
 func (h *DriverHandler) GetBooking(c *gin.Context) {
-    bookingID := c.Param("bookingID")
-    if bookingID == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Booking ID is required"})
-        return
-    }
+	bookingID := c.Param("bookingID")
+	if bookingID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Booking ID is required"})
+		return
+	}
 
-    driverID, exists := c.Get("userID")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
+	driverID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    booking, err := h.Service.GetBooking(driverID.(string), bookingID)
-    if err != nil {
-        if err.Error() == "booking not found or not assigned to the driver" {
-            c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-        } else {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve booking"})
-        }
-        return
-    }
+	booking, err := h.Service.GetBooking(driverID.(string), bookingID)
+	if err != nil {
+		if err.Error() == "booking not found or not assigned to the driver" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve booking"})
+		}
+		return
+	}
 
-    c.JSON(http.StatusOK, booking)
+	c.JSON(http.StatusOK, booking)
 }

@@ -17,12 +17,13 @@ type BookingRepository interface {
     FindActiveBookingByDriverID(driverID string) (*models.Booking, error)
     FindPendingScheduledBookings() ([]*models.Booking, error)
     GetActiveBookingsCount() (int64, error)
-    GetBookingStatistics() (*models.BookingStatistics, error)
     FindAssignedBookings(driverID string) ([]*models.Booking, error)
     UpdateDriverResponseStatus(bookingID, status string) error
     GetActiveBookingsByDriverID(driverID string) ([]*models.Booking, error)
     GetActiveBookingByUserID(userID string) (*models.Booking, error)
-    FindByIDAndDriverID(id string, driverID string) (*models.Booking, error) // New Method
+    FindByIDAndDriverID(id string, driverID string) (*models.Booking, error)
+    GetAverageTripTime() (float64, error)
+    GetTotalBookings() (int64, error)
 }
 
 type bookingRepository struct {
@@ -108,54 +109,6 @@ func (r *bookingRepository) GetActiveBookingsCount() (int64, error) {
     return count, err
 }
 
-func (r *bookingRepository) GetBookingStatistics() (*models.BookingStatistics, error) {
-    ctx := context.Background()
-    totalBookings, err := r.collection.CountDocuments(ctx, bson.M{})
-    if err != nil {
-        return nil, err
-    }
-
-    completedBookings, err := r.collection.CountDocuments(ctx, bson.M{"status": "Completed"})
-    if err != nil {
-        return nil, err
-    }
-
-    // Calculate average trip time for completed bookings
-    matchStage := bson.D{{Key: "$match", Value: bson.D{{Key: "status", Value: "Completed"}}}}
-    projectStage := bson.D{{Key: "$project", Value: bson.D{
-        {Key: "duration", Value: bson.D{{Key: "$subtract", Value: []interface{}{"$completed_at", "$started_at"}}}},
-    }}}
-    groupStage := bson.D{{Key: "$group", Value: bson.D{
-        {Key: "_id", Value: nil},
-        {Key: "averageDuration", Value: bson.D{{Key: "$avg", Value: "$duration"}}},
-    }}}
-
-    cursor, err := r.collection.Aggregate(ctx, mongo.Pipeline{matchStage, projectStage, groupStage})
-    if err != nil {
-        return nil, err
-    }
-    var results []bson.M
-    if err := cursor.All(ctx, &results); err != nil {
-        return nil, err
-    }
-
-    var averageTripTime float64
-    if len(results) > 0 {
-        averageDuration := results[0]["averageDuration"]
-        if averageDuration != nil {
-            averageTripTime = float64(averageDuration.(int64)) / 60000 // Convert ms to minutes
-        }
-    }
-
-    stats := &models.BookingStatistics{
-        TotalBookings:     totalBookings,
-        CompletedBookings: completedBookings,
-        AverageTripTime:   averageTripTime,
-    }
-
-    return stats, nil
-}
-
 func (r *bookingRepository) UpdateDriverResponseStatus(bookingID, status string) error {
     _, err := r.collection.UpdateOne(
         context.Background(),
@@ -237,4 +190,52 @@ func (r *bookingRepository) FindByIDAndDriverID(id string, driverID string) (*mo
         return nil, err
     }
     return &booking, nil
+}
+
+// GetAverageTripTime calculates the average trip time of completed bookings in minutes.
+func (r *bookingRepository) GetAverageTripTime() (float64, error) {
+    pipeline := mongo.Pipeline{
+        {{"$match", bson.D{
+            {"status", "Completed"},
+            {"started_at", bson.D{{"$exists", true}}},
+            {"completed_at", bson.D{{"$exists", true}}},
+        }}},
+        {{"$project", bson.D{
+            {"trip_time", bson.D{
+                {"$divide", bson.A{
+                    bson.D{{"$subtract", bson.A{"$completed_at", "$started_at"}}},
+                    1000 * 60, // Convert milliseconds to minutes
+                }},
+            }},
+        }}},
+        {{"$group", bson.D{
+            {"_id", nil},
+            {"average_trip_time", bson.D{{"$avg", "$trip_time"}}},
+        }}},
+    }
+
+    cursor, err := r.collection.Aggregate(context.Background(), pipeline)
+    if err != nil {
+        return 0, err
+    }
+    defer cursor.Close(context.Background())
+
+    var result struct {
+        AverageTripTime float64 `bson:"average_trip_time"`
+    }
+
+    if cursor.Next(context.Background()) {
+        if err := cursor.Decode(&result); err != nil {
+            return 0, err
+        }
+        return result.AverageTripTime, nil
+    }
+
+    return 0, nil // No completed bookings
+}
+
+// GetTotalBookings returns the total number of bookings.
+func (r *bookingRepository) GetTotalBookings() (int64, error) {
+    count, err := r.collection.CountDocuments(context.Background(), bson.M{})
+    return count, err
 }

@@ -9,3 +9,10 @@ type Admin struct {
     PasswordHash string    `bson:"password_hash" json:"-"`
     CreatedAt    time.Time `bson:"created_at" json:"created_at"`
 }
+
+type AdminStatistics struct {
+    AverageTripTime float64 `json:"average_trip_time"` // in minutes
+    TotalBookings   int64   `json:"total_bookings"`
+    TotalDrivers    int64   `json:"total_drivers"`
+    TotalUsers      int64   `json:"total_users"`
+}

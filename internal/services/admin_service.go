@@ -13,12 +13,18 @@ import (
 type AdminService struct {
     Repo        repositories.AdminRepository
     AuthService *auth.AuthService
+    UserRepo    repositories.UserRepository
+    DriverRepo  repositories.DriverRepository
+    BookingRepo repositories.BookingRepository
 }
 
-func NewAdminService(repo repositories.AdminRepository, authService *auth.AuthService) *AdminService {
+func NewAdminService(repo repositories.AdminRepository, authService *auth.AuthService, userRepo repositories.UserRepository, driverRepo repositories.DriverRepository, bookingRepo repositories.BookingRepository) *AdminService {
     return &AdminService{
         Repo:        repo,
         AuthService: authService,
+        UserRepo:    userRepo,
+        DriverRepo:  driverRepo,
+        BookingRepo: bookingRepo,
     }
 }
 
@@ -51,4 +57,35 @@ func (s *AdminService) Login(email, password string) (*models.Admin, error) {
     }
 
     return admin, nil
+}
+
+func (s *AdminService) GetStatistics() (*models.AdminStatistics, error) {
+    avgTripTime, err := s.BookingRepo.GetAverageTripTime()
+    if err != nil {
+        return nil, err
+    }
+
+    totalBookings, err := s.BookingRepo.GetTotalBookings()
+    if err != nil {
+        return nil, err
+    }
+
+    totalDrivers, err := s.DriverRepo.GetTotalDrivers()
+    if err != nil {
+        return nil, err
+    }
+
+    totalUsers, err := s.UserRepo.GetTotalUsers()
+    if err != nil {
+        return nil, err
+    }
+
+    stats := &models.AdminStatistics{
+        AverageTripTime: avgTripTime,
+        TotalBookings:   totalBookings,
+        TotalDrivers:    totalDrivers,
+        TotalUsers:      totalUsers,
+    }
+
+    return stats, nil
 }

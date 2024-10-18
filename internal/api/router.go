@@ -45,6 +45,8 @@ func SetupRouter(
 	router.GET("/ws", func(c *gin.Context) {
 		handlers.ServeWs(authService, wsHub, c)
 	})
+	
+	router.GET("/test", testHandler.PublishTestMessages)
 
 	// Protected routes with JWT middleware
 	userProtected := router.Group("/", utils.JWTAuthMiddleware(authService, "user"))
@@ -53,7 +55,6 @@ func SetupRouter(
 		userProtected.GET("/bookings/:bookingID/driver", userHandler.GetDriverForBooking)
 		userProtected.POST("/bookings", bookingHandler.CreateBooking)
 		userProtected.POST("/bookings/estimate", bookingHandler.GetPriceEstimate)
-		userProtected.GET("/test", testHandler.PublishTestMessages)
 	}
 
 	driverProtected := router.Group("/drivers", utils.JWTAuthMiddleware(authService, "driver"))
@@ -75,7 +76,7 @@ func SetupRouter(
 		adminProtected.GET("/drivers/:driverID", adminHandler.GetDriver)
 		adminProtected.PUT("/drivers/:driverID", adminHandler.UpdateDriver)
 
-		adminProtected.GET("/analytics", adminHandler.GetAnalytics)
+		adminProtected.GET("/statistics", adminHandler.GetStatistics)
 
 		// Vehicle management routes
 		adminProtected.POST("/vehicles", adminHandler.CreateVehicle)

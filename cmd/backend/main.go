@@ -70,7 +70,7 @@ func main() {
 	userService := services.NewUserService(userRepo, bookingRepo, driverRepo, authService)
     bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService, messagingClient)
     driverService := services.NewDriverService(driverRepo, bookingRepo, userRepo, *bookingService, authService, messagingClient)
-	adminService := services.NewAdminService(adminRepo, authService)
+    adminService := services.NewAdminService(adminRepo, authService, userRepo, driverRepo, bookingRepo)
 	vehicleService := services.NewVehicleService(vehicleRepo)
 
 	// Initialize handlers and pass the auth service where needed

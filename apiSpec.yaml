@@ -1,0 +1,2545 @@
+openapi: 3.0.3
+info:
+  title: Logi Backend API
+  description: API documentation for the Logi backend application.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+tags:
+  - name: Authentication
+    description: User, Driver, and Admin authentication
+  - name: Users
+    description: Operations related to users
+  - name: Drivers
+    description: Operations related to drivers
+  - name: Admin
+    description: Operations related to administrators
+  - name: Bookings
+    description: Operations related to bookings
+  - name: Vehicles
+    description: Operations related to vehicles
+  - name: WebSocket
+    description: WebSocket connections
+  - name: Testing
+    description: Testing endpoints
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserRegistrationRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: johndoe@example.com
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+
+    UserLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: johndoe@example.com
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "user123"
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: johndoe@example.com
+        role:
+          type: string
+          example: user
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T12:34:56Z"
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    DriverRegistrationRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - vehicle_type
+      properties:
+        name:
+          type: string
+          example: Jane Smith
+        email:
+          type: string
+          format: email
+          example: janesmith@example.com
+        password:
+          type: string
+          format: password
+          example: AnotherStrongPass!456
+        vehicle_type:
+          type: string
+          enum: [bike, car, van]
+          example: car
+
+    AdminRegistrationRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          example: Admin User
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        password:
+          type: string
+          format: password
+          example: AdminPass789!
+
+    VehicleRequest:
+      type: object
+      required:
+        - make
+        - model
+        - year
+        - license_plate
+        - vehicle_type
+      properties:
+        make:
+          type: string
+          example: Toyota
+        model:
+          type: string
+          example: Corolla
+        year:
+          type: integer
+          example: 2020
+        license_plate:
+          type: string
+          example: ABC-1234
+        vehicle_type:
+          type: string
+          enum: [bike, car, van]
+          example: car
+        driver_id:
+          type: string
+          example: "driver456"
+
+    VehicleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "vehicle789"
+        make:
+          type: string
+          example: Toyota
+        model:
+          type: string
+          example: Corolla
+        year:
+          type: integer
+          example: 2020
+        license_plate:
+          type: string
+          example: ABC-1234
+        vehicle_type:
+          type: string
+          example: car
+        driver_id:
+          type: string
+          example: "driver456"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T12:34:56Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-04-02T08:21:30Z"
+
+    BookingRequest:
+      type: object
+      required:
+        - pickup_location
+        - dropoff_location
+        - vehicle_type
+      properties:
+        pickup_location:
+          $ref: '#/components/schemas/Location'
+        dropoff_location:
+          $ref: '#/components/schemas/Location'
+        vehicle_type:
+          type: string
+          enum: [bike, car, van]
+          example: car
+        scheduled_time:
+          type: string
+          format: date-time
+          example: "2024-04-05T15:00:00Z"
+
+    BookingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "booking123"
+        user_id:
+          type: string
+          example: "user123"
+        driver_id:
+          type: string
+          nullable: true
+          example: "driver456"
+        pickup_location:
+          $ref: '#/components/schemas/Location'
+        dropoff_location:
+          $ref: '#/components/schemas/Location'
+        vehicle_type:
+          type: string
+          example: car
+        price_estimate:
+          type: number
+          format: float
+          example: 25.50
+        status:
+          type: string
+          example: Pending
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T12:34:56Z"
+        scheduled_time:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-04-05T15:00:00Z"
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-04-05T15:10:00Z"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-04-05T16:00:00Z"
+        driver_response_status:
+          type: string
+          example: Pending
+
+    Location:
+      type: object
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          type: string
+          enum: [Point]
+          example: Point
+        coordinates:
+          type: array
+          items:
+            type: number
+            format: float
+          minItems: 2
+          maxItems: 2
+          example: [ -122.4194, 37.7749 ]
+
+    PriceEstimateRequest:
+      type: object
+      required:
+        - pickup_location
+        - dropoff_location
+        - vehicle_type
+      properties:
+        pickup_location:
+          $ref: '#/components/schemas/Location'
+        dropoff_location:
+          $ref: '#/components/schemas/Location'
+        vehicle_type:
+          type: string
+          enum: [bike, car, van]
+          example: car
+
+    PriceEstimateResponse:
+      type: object
+      properties:
+        estimated_price:
+          type: number
+          format: float
+          example: 25.50
+
+    DriverResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "driver456"
+        name:
+          type: string
+          example: Jane Smith
+        email:
+          type: string
+          format: email
+          example: janesmith@example.com
+        vehicle_type:
+          type: string
+          example: car
+        vehicle_id:
+          type: string
+          nullable: true
+          example: "vehicle789"
+        location:
+          $ref: '#/components/schemas/Location'
+        status:
+          type: string
+          enum: [Available, Busy, Offline]
+          example: Available
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T12:34:56Z"
+        current_booking_id:
+          type: string
+          nullable: true
+          example: "booking123"
+        accepted_bookings_count:
+          type: integer
+          example: 10
+        total_bookings_count:
+          type: integer
+          example: 15
+        completed_bookings_count:
+          type: integer
+          example: 8
+
+    AdminRegistrationRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          example: Admin User
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        password:
+          type: string
+          format: password
+          example: AdminPass789!
+
+    AdminResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "admin123"
+        name:
+          type: string
+          example: Admin User
+        email:
+          type: string
+          format: email
+          example: admin@example.com
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T12:34:56Z"
+
+    StatisticsResponse:
+      type: object
+      properties:
+        average_trip_time:
+          type: number
+          format: float
+          example: 35.5
+        total_bookings:
+          type: integer
+          example: 150
+        total_drivers:
+          type: integer
+          example: 20
+        total_users:
+          type: integer
+          example: 100
+
+    BookingStatusUpdateRequest:
+      type: object
+      required:
+        - booking_id
+        - status
+      properties:
+        booking_id:
+          type: string
+          example: "booking123"
+        status:
+          type: string
+          enum: [En Route to Pickup, Goods Collected, In Transit, Delivered, Completed]
+          example: In Transit
+
+    DriverStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [Available, Busy, Offline]
+          example: Busy
+
+    UpdateLocationRequest:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        latitude:
+          type: number
+          format: float
+          example: 37.7749
+        longitude:
+          type: number
+          format: float
+          example: -122.4194
+
+    RespondToBookingRequest:
+      type: object
+      required:
+        - booking_id
+        - response
+      properties:
+        booking_id:
+          type: string
+          example: "booking123"
+        response:
+          type: string
+          enum: [accept, reject]
+          example: accept
+
+    WebSocketMessage:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "user123"
+        type:
+          type: string
+          example: status_update
+        payload:
+          type: object
+          additionalProperties: true
+
+  parameters:
+    bookingID:
+      name: bookingID
+      in: path
+      required: true
+      description: ID of the booking
+      schema:
+        type: string
+        example: "booking123"
+
+    driverID:
+      name: driverID
+      in: path
+      required: true
+      description: ID of the driver
+      schema:
+        type: string
+        example: "driver456"
+
+    vehicleID:
+      name: vehicleID
+      in: path
+      required: true
+      description: ID of the vehicle
+      schema:
+        type: string
+        example: "vehicle789"
+
+security:
+  - BearerAuth: []
+
+paths:
+  /users/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User registered successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "User already exists"
+
+  /users/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid email or password"
+
+  /drivers/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverRegistrationRequest'
+      responses:
+        "201":
+          description: Driver registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver registered successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Driver already exists"
+
+  /drivers/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login a driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest' # Reuse UserLoginRequest
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid email or password"
+
+  /admins/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminRegistrationRequest'
+      responses:
+        "201":
+          description: Admin registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Admin registered successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Admin already exists"
+
+  /admins/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login an admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest' # Reuse UserLoginRequest
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid email or password"
+
+  /users/{userID}/active-booking:
+    get:
+      tags:
+        - Users
+      summary: Get active booking for a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "user123"
+      responses:
+        "200":
+          description: Active booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "No active booking found"
+
+  /bookings/{bookingID}/driver:
+    get:
+      tags:
+        - Users
+      summary: Get driver information for a specific booking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: Driver information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized access to booking"
+        "404":
+          description: Driver not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "No driver assigned to the booking"
+
+  /bookings:
+    post:
+      tags:
+        - Bookings
+      summary: Create a new booking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        "201":
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid input"
+
+  /bookings/estimate:
+    post:
+      tags:
+        - Bookings
+      summary: Get price estimate for a booking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceEstimateRequest'
+      responses:
+        "200":
+          description: Price estimate retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceEstimateResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid input: Pickup location is required"
+
+  /drivers/{driverID}/active-bookings:
+    get:
+      tags:
+        - Drivers
+      summary: Get active bookings for a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: driverID
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "driver456"
+      responses:
+        "200":
+          description: Active bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+
+  /bookings/{bookingID}/user:
+    get:
+      tags:
+        - Drivers
+      summary: Get user information for a specific booking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized access to booking"
+
+  /bookings/{bookingID}:
+    get:
+      tags:
+        - Drivers
+      summary: Get details of a specific booking for a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: Booking details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "404":
+          description: Booking not found or not assigned to the driver
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Booking not found or not assigned to the driver"
+
+  /drivers/me:
+    get:
+      tags:
+        - Drivers
+      summary: Get authenticated driver's information
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Driver information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+
+  /drivers/status:
+    post:
+      tags:
+        - Drivers
+      summary: Update driver's status
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverStatusUpdateRequest'
+      responses:
+        "200":
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Status updated successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid status value"
+
+  /drivers/booking-status:
+    post:
+      tags:
+        - Drivers
+      summary: Update booking status
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingStatusUpdateRequest'
+      responses:
+        "200":
+          description: Booking status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Booking status updated successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid status transition"
+
+  /drivers/update-location:
+    post:
+      tags:
+        - Drivers
+      summary: Update driver's location
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        "200":
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Location updated successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid input"
+
+  /drivers/pending-bookings:
+    get:
+      tags:
+        - Drivers
+      summary: Get pending bookings for a driver
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Pending bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+
+  /drivers/respond-booking:
+    post:
+      tags:
+        - Drivers
+      summary: Respond to a booking request
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToBookingRequest'
+      responses:
+        "200":
+          description: Response recorded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Response recorded"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid response"
+
+  /admin/drivers:
+    get:
+      tags:
+        - Admin
+      summary: Get all drivers
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Drivers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DriverResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to fetch drivers"
+
+  /admin/drivers/{driverID}:
+    get:
+      tags:
+        - Admin
+      summary: Get a specific driver by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      responses:
+        "200":
+          description: Driver retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "404":
+          description: Driver not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Driver not found"
+
+    put:
+      tags:
+        - Admin
+      summary: Update a specific driver by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverResponse' # Assuming update uses DriverResponse schema
+      responses:
+        "200":
+          description: Driver updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver updated successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to update driver"
+
+  /admin/statistics:
+    get:
+      tags:
+        - Admin
+      summary: Get application statistics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to retrieve statistics"
+
+  /admin/vehicles:
+    post:
+      tags:
+        - Admin
+      summary: Create a new vehicle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleRequest'
+      responses:
+        "201":
+          description: Vehicle created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle created successfully"
+                  vehicle:
+                    $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to create vehicle"
+
+    get:
+      tags:
+        - Admin
+      summary: Get all vehicles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Vehicles retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to fetch vehicles"
+
+  /admin/vehicles/{vehicleID}:
+    get:
+      tags:
+        - Admin
+      summary: Get a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+        "404":
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Vehicle not found"
+
+    put:
+      tags:
+        - Admin
+      summary: Update a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleResponse' # Assuming update uses VehicleResponse schema
+      responses:
+        "200":
+          description: Vehicle updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle updated successfully"
+                  vehicle:
+                    $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to update vehicle"
+
+    delete:
+      tags:
+        - Admin
+      summary: Delete a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle deleted successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to delete vehicle"
+
+  /admin/drivers/{driverID}/vehicle:
+    put:
+      tags:
+        - Admin
+      summary: Assign a vehicle to a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicle_id
+              properties:
+                vehicle_id:
+                  type: string
+                  example: "vehicle789"
+      responses:
+        "200":
+          description: Vehicle assigned to driver successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle assigned to driver successfully"
+        "404":
+          description: Driver or Vehicle not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Driver or Vehicle not found"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to assign vehicle to driver"
+
+  /ws:
+    get:
+      tags:
+        - WebSocket
+      summary: Establish a WebSocket connection
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: JWT token for authentication
+          schema:
+            type: string
+            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket connection established)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid token"
+
+  /test:
+    get:
+      tags:
+        - Testing
+      summary: Publish test messages
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Test messages published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Test messages published successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to publish status update"
+
+  /users:
+    post:
+      tags:
+        - Users
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistrationRequest'
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/login:
+    post:
+      tags:
+        - Users
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers:
+    post:
+      tags:
+        - Drivers
+      summary: Register a new driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverRegistrationRequest'
+      responses:
+        "201":
+          description: Driver registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Drivers
+      summary: Driver login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admins:
+    post:
+      tags:
+        - Admin
+      summary: Register a new admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminRegistrationRequest'
+      responses:
+        "201":
+          description: Admin registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Admin
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        "200":
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /active-booking:
+    get:
+      tags:
+        - Users
+      summary: Get active booking for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Active booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: No active booking found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/{bookingID}/driver:
+    get:
+      tags:
+        - Users
+      summary: Get driver information for a specific booking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: Driver information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "403":
+          description: Unauthorized access to booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Driver not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings:
+    post:
+      tags:
+        - Bookings
+      summary: Create a new booking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        "201":
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/estimate:
+    post:
+      tags:
+        - Bookings
+      summary: Get price estimate for a booking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceEstimateRequest'
+      responses:
+        "200":
+          description: Price estimate retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceEstimateResponse'
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/{driverID}/active-bookings:
+    get:
+      tags:
+        - Drivers
+      summary: Get active bookings for a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      responses:
+        "200":
+          description: Active bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/{bookingID}/user:
+    get:
+      tags:
+        - Drivers
+      summary: Get user information for a specific booking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        "403":
+          description: Unauthorized access to booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /bookings/{bookingID}:
+    get:
+      tags:
+        - Drivers
+      summary: Get details of a specific booking for a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/bookingID'
+      responses:
+        "200":
+          description: Booking details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        "404":
+          description: Booking not found or not assigned to the driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/me:
+    get:
+      tags:
+        - Drivers
+      summary: Get authenticated driver's information
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Driver information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/status:
+    post:
+      tags:
+        - Drivers
+      summary: Update driver's status
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverStatusUpdateRequest'
+      responses:
+        "200":
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Status updated successfully"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/booking-status:
+    post:
+      tags:
+        - Drivers
+      summary: Update booking status
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingStatusUpdateRequest'
+      responses:
+        "200":
+          description: Booking status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Booking status updated successfully"
+        "400":
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/update-location:
+    post:
+      tags:
+        - Drivers
+      summary: Update driver's location
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        "200":
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Location updated successfully"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/pending-bookings:
+    get:
+      tags:
+        - Drivers
+      summary: Get pending bookings for a driver
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Pending bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /drivers/respond-booking:
+    post:
+      tags:
+        - Drivers
+      summary: Respond to a booking request
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToBookingRequest'
+      responses:
+        "200":
+          description: Response recorded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Response recorded"
+        "400":
+          description: Invalid response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/drivers/{driverID}/vehicle:
+    put:
+      tags:
+        - Admin
+      summary: Assign a vehicle to a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicle_id
+              properties:
+                vehicle_id:
+                  type: string
+                  example: "vehicle789"
+      responses:
+        "200":
+          description: Vehicle assigned to driver successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle assigned to driver successfully"
+        "404":
+          description: Driver or Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/drivers/{driverID}:
+    get:
+      tags:
+        - Admin
+      summary: Get a specific driver by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      responses:
+        "200":
+          description: Driver retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverResponse'
+        "404":
+          description: Driver not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Admin
+      summary: Update a specific driver by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverResponse' # Assuming update uses DriverResponse schema
+      responses:
+        "200":
+          description: Driver updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver updated successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/statistics:
+    get:
+      tags:
+        - Admin
+      summary: Get application statistics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/vehicles:
+    post:
+      tags:
+        - Admin
+      summary: Create a new vehicle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleRequest'
+      responses:
+        "201":
+          description: Vehicle created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle created successfully"
+                  vehicle:
+                    $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Admin
+      summary: Get all vehicles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Vehicles retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/vehicles/{vehicleID}:
+    get:
+      tags:
+        - Admin
+      summary: Get a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+        "404":
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Admin
+      summary: Update a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleResponse' # Assuming update uses VehicleResponse schema
+      responses:
+        "200":
+          description: Vehicle updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle updated successfully"
+                  vehicle:
+                    $ref: '#/components/schemas/VehicleResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Admin
+      summary: Delete a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle deleted successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/drivers/{driverID}/vehicle:
+    put:
+      tags:
+        - Admin
+      summary: Assign a vehicle to a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicle_id
+              properties:
+                vehicle_id:
+                  type: string
+                  example: "vehicle789"
+      responses:
+        "200":
+          description: Vehicle assigned to driver successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle assigned to driver successfully"
+        "404":
+          description: Driver or Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/statistics:
+    get:
+      tags:
+        - Admin
+      summary: Get application statistics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vehicles:
+    post:
+      tags:
+        - Vehicles
+      summary: Create a new vehicle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleRequest'
+      responses:
+        "201":
+          description: Vehicle created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /vehicles/{vehicleID}:
+    get:
+      tags:
+        - Vehicles
+      summary: Get a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+        "404":
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Vehicles
+      summary: Update a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleResponse'
+      responses:
+        "200":
+          description: Vehicle updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+        "404":
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Vehicles
+      summary: Delete a specific vehicle by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/vehicleID'
+      responses:
+        "200":
+          description: Vehicle deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle deleted successfully"
+        "404":
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/drivers/{driverID}/vehicle:
+    put:
+      tags:
+        - Admin
+      summary: Assign a vehicle to a driver
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/driverID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicle_id
+              properties:
+                vehicle_id:
+                  type: string
+                  example: "vehicle789"
+      responses:
+        "200":
+          description: Vehicle assigned to driver successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Vehicle assigned to driver successfully"
+        "404":
+          description: Driver or Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/statistics:
+    get:
+      tags:
+        - Admin
+      summary: Get application statistics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ws:
+    get:
+      tags:
+        - WebSocket
+      summary: Establish a WebSocket connection
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: JWT token for authentication
+          schema:
+            type: string
+            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket connection established)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /test:
+    get:
+      tags:
+        - Testing
+      summary: Publish test messages
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Test messages published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Test messages published successfully"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Error message detailing what went wrong"
+
+    # Additional schemas can be added here as needed
+
+security:
+  - BearerAuth: []
+

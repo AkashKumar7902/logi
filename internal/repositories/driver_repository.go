@@ -20,6 +20,10 @@ type DriverRepository interface {
 	UpdateDriver(driver *models.Driver) error
 	UpdateLocation(driverID string, location models.Location) error
     UpdateCurrentBookingID(driverID, bookingID string) error
+	IncrementAcceptedBookings(driverID string) error
+    IncrementTotalBookings(driverID string) error
+	IncrementCompletedBookings(driverID string) error
+	GetTotalDrivers() (int64, error)
 }
 
 type driverRepository struct {
@@ -50,6 +54,9 @@ func (r *driverRepository) Create(driver *models.Driver) error {
 			Coordinates: []float64{0, 0}, // Default to valid values.
 		}
 	}	
+	if driver.VehicleType == "" {
+		driver.VehicleType = "car"
+	}
 	_, err := r.collection.InsertOne(context.Background(), driver)
 	utils.Logger.Println(err)
 	return err
@@ -124,6 +131,7 @@ func (r *driverRepository) GetAllDrivers() ([]*models.Driver, error) {
 		}
 		drivers = append(drivers, &driver)
 	}
+	utils.Logger.Println("drivers ", drivers)
 	return drivers, nil
 }
 
@@ -163,4 +171,40 @@ func (r *driverRepository) UpdateCurrentBookingID(driverID, bookingID string) er
         bson.M{"$set": bson.M{"current_booking_id": bookingID}},
     )
     return err
+}
+
+func (r *driverRepository) IncrementAcceptedBookings(driverID string) error {
+    update := bson.M{
+        "$inc": bson.M{
+            "accepted_bookings_count": 1,
+        },
+    }
+    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
+    return err
+}
+
+func (r *driverRepository) IncrementTotalBookings(driverID string) error {
+    update := bson.M{
+        "$inc": bson.M{
+            "total_bookings_count": 1,
+        },
+    }
+    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
+    return err
+}
+
+func (r *driverRepository) IncrementCompletedBookings(driverID string) error {
+    update := bson.M{
+        "$inc": bson.M{
+            "completed_bookings_count": 1,
+        },
+    }
+    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
+    return err
+}
+
+// GetTotalDrivers returns the total number of drivers.
+func (r *driverRepository) GetTotalDrivers() (int64, error) {
+    count, err := r.collection.CountDocuments(context.Background(), bson.M{})
+    return count, err
 }

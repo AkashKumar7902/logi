@@ -13,6 +13,9 @@ type Driver struct {
     Status       string    `bson:"status" json:"status"` // Status: Available, Busy, Offline
     CreatedAt    time.Time `bson:"created_at" json:"created_at"`
     CurrentBookingID string `bson:"current_booking_id,omitempty" json:"current_booking_id,omitempty"`
+    AcceptedBookingsCount int `bson:"accepted_bookings_count" json:"accepted_bookings_count"`
+    TotalBookingsCount    int `bson:"total_bookings_count" json:"total_bookings_count"`
+    CompletedBookingsCount int `bson:"completed_bookings_count" json:"completed_bookings_count"`
 }
 
 type Location struct {

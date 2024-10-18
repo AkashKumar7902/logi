@@ -121,9 +121,6 @@ func (s *BookingService) ActivateScheduledBookings() error {
     return nil
 }
 
-func (s *BookingService) GetBookingStatistics() (*models.BookingStatistics, error) {
-    return s.Repo.GetBookingStatistics()
-}
 
 func (s *BookingService) GetPriceEstimate(bookingReq *models.PriceEstimateRequest) (float64, error) {
     price, err := s.PricingService.CalculatePrice(
@@ -162,6 +159,28 @@ func (s *BookingService) DriverAcceptsBooking(driverID, bookingID string) error 
     if err != nil {
         return err
     }
+
+    // Increment driver's counts
+    err = s.DriverRepo.IncrementAcceptedBookings(driverID)
+    if err != nil {
+        // Log the error but do not fail the operation
+        utils.Logger.Printf("Failed to increment accepted bookings for driver %s: %v", driverID, err)
+    }
+
+    err = s.DriverRepo.UpdateStatus(driverID, "Busy")
+	if err != nil {
+		return err
+	}
+
+	// Publish the status update to admins via MessagingClient
+	publishErr := s.MessagingClient.Publish("", "driver_status_update", map[string]interface{}{
+		"driver_id": driverID,
+		"status":    "Busy",
+	})
+	if publishErr != nil {
+		// Log the error but do not fail the operation
+		utils.Logger.Printf("Failed to publish driver status update: %v", publishErr)
+	}
 
     // Notify user that a driver has accepted the booking
     err = s.MessagingClient.Publish(booking.UserID, "booking_accepted", map[string]interface{}{

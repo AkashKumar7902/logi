@@ -12,6 +12,7 @@ type UserRepository interface {
     Create(user *models.User) error
     FindByEmail(email string) (*models.User, error)
     FindByID(userID string) (*models.User, error)
+    GetTotalUsers() (int64, error)
 }
 
 type userRepository struct {
@@ -44,4 +45,9 @@ func (r *userRepository) FindByID(userID string) (*models.User, error) {
         return nil, err
     }
     return &user, nil
+}
+
+func (r *userRepository) GetTotalUsers() (int64, error) {
+    count, err := r.collection.CountDocuments(context.Background(), bson.M{})
+    return count, err
 }
