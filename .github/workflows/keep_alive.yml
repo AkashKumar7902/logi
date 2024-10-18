@@ -10,15 +10,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '16' # or any required version
 
-    - name: Run keep-alive script
+    - name: Keep Backend Alive
       run: |
-        npm install cron
-        node cron.js
+        node -e "
+          const https = require('https');
+          const backendUrl = 'https://logi-y295.onrender.com';
+          https.get(backendUrl, (res) => {
+            if (res.statusCode === 200) {
+              console.log('Server is alive');
+            } else {
+              console.error(\`Failed with status code: \${res.statusCode}\`);
+            }
+          }).on('error', (err) => {
+            console.error('Error occurred:', err.message);
+          });
+        "
