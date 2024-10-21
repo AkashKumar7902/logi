@@ -87,7 +87,7 @@ func (s *BookingService) AssignBookingToDrivers(booking *models.Booking) error {
         utils.Logger.Println("sending booking request to driver", driver.ID)
         err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
         if err != nil {
-            // Handle messaging errors
+            utils.Logger.Println("failed to send booking request to driver", driver.ID, err)
             continue
         }
     }
