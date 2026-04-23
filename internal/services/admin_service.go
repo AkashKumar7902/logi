@@ -17,15 +17,17 @@ type AdminService struct {
 	UserRepo    repositories.UserRepository
 	DriverRepo  repositories.DriverRepository
 	BookingRepo repositories.BookingRepository
+	VehicleRepo repositories.VehicleRepository
 }
 
-func NewAdminService(repo repositories.AdminRepository, authService *auth.AuthService, userRepo repositories.UserRepository, driverRepo repositories.DriverRepository, bookingRepo repositories.BookingRepository) *AdminService {
+func NewAdminService(repo repositories.AdminRepository, authService *auth.AuthService, userRepo repositories.UserRepository, driverRepo repositories.DriverRepository, bookingRepo repositories.BookingRepository, vehicleRepo repositories.VehicleRepository) *AdminService {
 	return &AdminService{
 		Repo:        repo,
 		AuthService: authService,
 		UserRepo:    userRepo,
 		DriverRepo:  driverRepo,
 		BookingRepo: bookingRepo,
+		VehicleRepo: vehicleRepo,
 	}
 }
 
@@ -89,4 +91,39 @@ func (s *AdminService) GetStatistics(ctx context.Context) (*models.AdminStatisti
 	}
 
 	return stats, nil
+}
+
+func (s *AdminService) AssignVehicleToDriver(ctx context.Context, driverID, vehicleID string) error {
+	driver, err := s.DriverRepo.FindByID(ctx, driverID)
+	if err != nil {
+		return err
+	}
+
+	vehicle, err := s.VehicleRepo.FindByID(ctx, vehicleID)
+	if err != nil {
+		return err
+	}
+
+	if driver.VehicleID == vehicleID && vehicle.DriverID == driverID {
+		return nil
+	}
+	if driver.VehicleID != "" && driver.VehicleID != vehicleID {
+		return errors.New("driver already has a vehicle assigned")
+	}
+	if vehicle.DriverID != "" && vehicle.DriverID != driverID {
+		return errors.New("vehicle is already assigned to another driver")
+	}
+
+	if err := s.DriverRepo.AssignVehicle(ctx, driverID, vehicleID, vehicle.VehicleType); err != nil {
+		return err
+	}
+	if err := s.VehicleRepo.AssignDriver(ctx, vehicleID, driverID); err != nil {
+		rollbackErr := s.DriverRepo.AssignVehicle(ctx, driverID, driver.VehicleID, driver.VehicleType)
+		if rollbackErr != nil {
+			return errors.New("failed to assign vehicle and rollback driver state")
+		}
+		return err
+	}
+
+	return nil
 }

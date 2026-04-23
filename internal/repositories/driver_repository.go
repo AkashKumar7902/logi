@@ -15,6 +15,7 @@ type DriverRepository interface {
 	FindByEmail(ctx context.Context, email string) (*models.Driver, error)
 	FindAvailableDrivers(ctx context.Context, location models.Location, vehicleType string) ([]*models.Driver, error)
 	UpdateStatus(ctx context.Context, driverID string, status string) error
+	AssignVehicle(ctx context.Context, driverID, vehicleID, vehicleType string) error
 	GetAvailableDriversCount(ctx context.Context) (int64, error)
 	GetAllDrivers(ctx context.Context) ([]*models.Driver, error)
 	FindByID(ctx context.Context, driverID string) (*models.Driver, error)
@@ -48,6 +49,10 @@ func NewDriverRepository(dbClient *mongo.Client) DriverRepository {
 				{Key: "vehicle_type", Value: 1},
 			},
 			Options: options.Index().SetName("drivers_status_vehicle_type"),
+		},
+		{
+			Keys:    bson.D{{Key: "vehicle_id", Value: 1}},
+			Options: options.Index().SetUnique(true).SetSparse(true).SetName("drivers_vehicle_id_unique"),
 		},
 	}
 	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
@@ -92,7 +97,7 @@ func (r *driverRepository) FindAvailableDrivers(ctx context.Context, location mo
 	defer cancel()
 
 	filter := bson.M{
-		"status":       "Available",
+		"status":       models.DriverStatusAvailable,
 		"vehicle_type": vehicleType,
 		"location": bson.M{
 			"$near": bson.M{
@@ -131,11 +136,25 @@ func (r *driverRepository) UpdateStatus(ctx context.Context, driverID string, st
 	return err
 }
 
+func (r *driverRepository) AssignVehicle(ctx context.Context, driverID, vehicleID, vehicleType string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"vehicle_id":   vehicleID,
+			"vehicle_type": vehicleType,
+		},
+	}
+	_, err := r.collection.UpdateOne(opCtx, bson.M{"_id": driverID}, update)
+	return err
+}
+
 func (r *driverRepository) GetAvailableDriversCount(ctx context.Context) (int64, error) {
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
 
-	count, err := r.collection.CountDocuments(opCtx, bson.M{"status": "Available"})
+	count, err := r.collection.CountDocuments(opCtx, bson.M{"status": models.DriverStatusAvailable})
 	return count, err
 }
 
@@ -176,10 +195,10 @@ func (r *driverRepository) UpdateDriver(ctx context.Context, driver *models.Driv
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
 
-	_, err := r.collection.UpdateOne(
+	_, err := r.collection.ReplaceOne(
 		opCtx,
 		bson.M{"_id": driver.ID},
-		bson.M{"$set": driver},
+		driver,
 	)
 	return err
 }

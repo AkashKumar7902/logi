@@ -75,10 +75,10 @@ func (r *bookingRepository) Update(ctx context.Context, booking *models.Booking)
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
 
-	_, err := r.collection.UpdateOne(
+	_, err := r.collection.ReplaceOne(
 		opCtx,
 		bson.M{"_id": booking.ID},
-		bson.M{"$set": booking},
+		booking,
 	)
 	return err
 }
@@ -102,13 +102,19 @@ func (r *bookingRepository) AssignDriverIfUnassigned(ctx context.Context, bookin
 	filter := bson.M{
 		"_id":       bookingID,
 		"driver_id": "",
-		"status":    "Pending",
+		"status":    models.BookingStatusPending,
+		"$or": bson.A{
+			bson.M{"offered_driver_ids": driverID},
+			bson.M{"offered_driver_ids": bson.M{"$exists": false}},
+		},
 	}
 	update := bson.M{
 		"$set": bson.M{
 			"driver_id":              driverID,
-			"status":                 "Driver Assigned",
+			"status":                 models.BookingStatusDriverAssigned,
 			"driver_response_status": "Accepted",
+			"offered_driver_ids":     bson.A{},
+			"rejected_driver_ids":    bson.A{},
 		},
 	}
 	result, err := r.collection.UpdateOne(opCtx, filter, update)
@@ -126,12 +132,7 @@ func (r *bookingRepository) FindActiveBookingByDriverID(ctx context.Context, dri
 	filter := bson.M{
 		"driver_id": driverID,
 		"status": bson.M{
-			"$in": []string{
-				"Driver Assigned",
-				"En Route to Pickup",
-				"Goods Collected",
-				"In Transit",
-			},
+			"$in": models.DriverInProgressBookingStatuses,
 		},
 	}
 	err := r.collection.FindOne(opCtx, filter).Decode(&booking)
@@ -146,7 +147,7 @@ func (r *bookingRepository) FindPendingScheduledBookings(ctx context.Context) ([
 	defer cancel()
 
 	filter := bson.M{
-		"status":         "Pending",
+		"status":         models.BookingStatusPending,
 		"scheduled_time": bson.M{"$lte": time.Now()},
 	}
 	cursor, err := r.collection.Find(opCtx, filter)
@@ -172,7 +173,13 @@ func (r *bookingRepository) GetActiveBookingsCount(ctx context.Context) (int64, 
 
 	count, err := r.collection.CountDocuments(
 		opCtx,
-		bson.M{"status": bson.M{"$in": []string{"Pending", "Driver Assigned", "In Transit"}}},
+		bson.M{
+			"status": bson.M{"$in": models.ActiveDemandBookingStatuses},
+			"$or": bson.A{
+				bson.M{"scheduled_time": bson.M{"$exists": false}},
+				bson.M{"scheduled_time": bson.M{"$lte": time.Now()}},
+			},
+		},
 	)
 	return count, err
 }
@@ -194,8 +201,11 @@ func (r *bookingRepository) FindAssignedBookings(ctx context.Context, driverID s
 	defer cancel()
 
 	filter := bson.M{
-		"driver_id":              driverID,
+		"driver_id":              "",
+		"status":                 models.BookingStatusPending,
+		"offered_driver_ids":     driverID,
 		"driver_response_status": "Pending",
+		"rejected_driver_ids":    bson.M{"$ne": driverID},
 	}
 	cursor, err := r.collection.Find(opCtx, filter)
 	if err != nil {
@@ -220,9 +230,7 @@ func (r *bookingRepository) GetActiveBookingByUserID(ctx context.Context, userID
 
 	filter := bson.M{
 		"user_id": userID,
-		"status": bson.M{
-			"$nin": []string{"Completed", "Pending"},
-		},
+		"status":  bson.M{"$ne": models.BookingStatusCompleted},
 	}
 	var booking models.Booking
 	err := r.collection.FindOne(opCtx, filter).Decode(&booking)
@@ -238,9 +246,7 @@ func (r *bookingRepository) GetActiveBookingsByDriverID(ctx context.Context, dri
 
 	filter := bson.M{
 		"driver_id": driverID,
-		"status": bson.M{
-			"$nin": []string{"Completed", "Pending"},
-		},
+		"status":    bson.M{"$ne": models.BookingStatusCompleted},
 	}
 	cursor, err := r.collection.Find(opCtx, filter)
 	if err != nil {
@@ -284,7 +290,7 @@ func (r *bookingRepository) GetAverageTripTime(ctx context.Context) (float64, er
 		{{
 			Key: "$match",
 			Value: bson.D{
-				{Key: "status", Value: "Completed"},
+				{Key: "status", Value: models.BookingStatusCompleted},
 				{Key: "started_at", Value: bson.D{{Key: "$exists", Value: true}}},
 				{Key: "completed_at", Value: bson.D{{Key: "$exists", Value: true}}},
 			},

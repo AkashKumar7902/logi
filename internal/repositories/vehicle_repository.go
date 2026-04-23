@@ -13,6 +13,7 @@ import (
 type VehicleRepository interface {
 	Create(ctx context.Context, vehicle *models.Vehicle) error
 	Update(ctx context.Context, vehicle *models.Vehicle) error
+	AssignDriver(ctx context.Context, vehicleID, driverID string) error
 	Delete(ctx context.Context, vehicleID string) error
 	FindByID(ctx context.Context, vehicleID string) (*models.Vehicle, error)
 	FindAll(ctx context.Context) ([]*models.Vehicle, error)
@@ -31,7 +32,7 @@ func NewVehicleRepository(dbClient *mongo.Client) VehicleRepository {
 		},
 		{
 			Keys:    bson.D{{Key: "driver_id", Value: 1}},
-			Options: options.Index().SetSparse(true).SetName("vehicles_driver_id_sparse"),
+			Options: options.Index().SetUnique(true).SetSparse(true).SetName("vehicles_driver_id_unique"),
 		},
 	}
 	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
@@ -53,10 +54,22 @@ func (r *vehicleRepository) Update(ctx context.Context, vehicle *models.Vehicle)
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
 
-	_, err := r.collection.UpdateOne(
+	_, err := r.collection.ReplaceOne(
 		opCtx,
 		bson.M{"_id": vehicle.ID},
-		bson.M{"$set": vehicle},
+		vehicle,
+	)
+	return err
+}
+
+func (r *vehicleRepository) AssignDriver(ctx context.Context, vehicleID, driverID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		opCtx,
+		bson.M{"_id": vehicleID},
+		bson.M{"$set": bson.M{"driver_id": driverID}},
 	)
 	return err
 }

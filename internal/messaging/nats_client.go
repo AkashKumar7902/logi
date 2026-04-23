@@ -37,3 +37,13 @@ func (n *NATSClient) Publish(userID string, messageType string, payload interfac
 
 	return n.Conn.Publish(subject, data)
 }
+
+func (n *NATSClient) SubscribeAll(handler func(Message) error) (*nats.Subscription, error) {
+	return n.Conn.Subscribe(">", func(msg *nats.Msg) {
+		var message Message
+		if err := json.Unmarshal(msg.Data, &message); err != nil {
+			return
+		}
+		_ = handler(message)
+	})
+}

@@ -148,6 +148,7 @@ type fakeDriverRepository struct {
 	findByEmailFn              func(context.Context, string) (*models.Driver, error)
 	findAvailableDriversFn     func(context.Context, models.Location, string) ([]*models.Driver, error)
 	updateStatusFn             func(context.Context, string, string) error
+	assignVehicleFn            func(context.Context, string, string, string) error
 	getAvailableDriversCountFn func(context.Context) (int64, error)
 	getAllDriversFn            func(context.Context) ([]*models.Driver, error)
 	findByIDFn                 func(context.Context, string) (*models.Driver, error)
@@ -184,6 +185,13 @@ func (f *fakeDriverRepository) FindAvailableDrivers(ctx context.Context, locatio
 func (f *fakeDriverRepository) UpdateStatus(ctx context.Context, driverID string, status string) error {
 	if f.updateStatusFn != nil {
 		return f.updateStatusFn(ctx, driverID, status)
+	}
+	return nil
+}
+
+func (f *fakeDriverRepository) AssignVehicle(ctx context.Context, driverID, vehicleID, vehicleType string) error {
+	if f.assignVehicleFn != nil {
+		return f.assignVehicleFn(ctx, driverID, vehicleID, vehicleType)
 	}
 	return nil
 }
@@ -256,6 +264,57 @@ func (f *fakeDriverRepository) GetTotalDrivers(ctx context.Context) (int64, erro
 		return f.getTotalDriversFn(ctx)
 	}
 	return 0, nil
+}
+
+type fakeVehicleRepository struct {
+	createFn       func(context.Context, *models.Vehicle) error
+	updateFn       func(context.Context, *models.Vehicle) error
+	assignDriverFn func(context.Context, string, string) error
+	deleteFn       func(context.Context, string) error
+	findByIDFn     func(context.Context, string) (*models.Vehicle, error)
+	findAllFn      func(context.Context) ([]*models.Vehicle, error)
+}
+
+func (f *fakeVehicleRepository) Create(ctx context.Context, vehicle *models.Vehicle) error {
+	if f.createFn != nil {
+		return f.createFn(ctx, vehicle)
+	}
+	return nil
+}
+
+func (f *fakeVehicleRepository) Update(ctx context.Context, vehicle *models.Vehicle) error {
+	if f.updateFn != nil {
+		return f.updateFn(ctx, vehicle)
+	}
+	return nil
+}
+
+func (f *fakeVehicleRepository) AssignDriver(ctx context.Context, vehicleID, driverID string) error {
+	if f.assignDriverFn != nil {
+		return f.assignDriverFn(ctx, vehicleID, driverID)
+	}
+	return nil
+}
+
+func (f *fakeVehicleRepository) Delete(ctx context.Context, vehicleID string) error {
+	if f.deleteFn != nil {
+		return f.deleteFn(ctx, vehicleID)
+	}
+	return nil
+}
+
+func (f *fakeVehicleRepository) FindByID(ctx context.Context, vehicleID string) (*models.Vehicle, error) {
+	if f.findByIDFn != nil {
+		return f.findByIDFn(ctx, vehicleID)
+	}
+	return nil, nil
+}
+
+func (f *fakeVehicleRepository) FindAll(ctx context.Context) ([]*models.Vehicle, error) {
+	if f.findAllFn != nil {
+		return f.findAllFn(ctx)
+	}
+	return nil, nil
 }
 
 type fakeUserRepository struct {

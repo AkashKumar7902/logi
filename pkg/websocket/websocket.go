@@ -1,14 +1,17 @@
 package websocket
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
+var ErrBroadcastQueueFull = errors.New("websocket broadcast queue is full")
+
 type WebSocketHub struct {
-	userClients  map[string]*websocket.Conn
-	adminClients map[string]*websocket.Conn
+	userClients  map[string]map[*websocket.Conn]struct{}
+	adminClients map[string]map[*websocket.Conn]struct{}
 	clientsMu    sync.RWMutex
 	broadcast    chan WebSocketMessage
 }
@@ -19,75 +22,104 @@ type WebSocketMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
+type clientConnection struct {
+	userID string
+	role   string
+	conn   *websocket.Conn
+}
+
 func NewWebSocketHub() *WebSocketHub {
 	return &WebSocketHub{
-		userClients:  make(map[string]*websocket.Conn),
-		adminClients: make(map[string]*websocket.Conn),
+		userClients:  make(map[string]map[*websocket.Conn]struct{}),
+		adminClients: make(map[string]map[*websocket.Conn]struct{}),
 		broadcast:    make(chan WebSocketMessage, 256),
 	}
 }
 
 func (hub *WebSocketHub) Run() {
 	for msg := range hub.broadcast {
-		adminSnapshot, userConn := hub.snapshotConnections(msg.UserID)
+		adminSnapshot, userSnapshot := hub.snapshotConnections(msg.UserID)
 
-		for adminID, conn := range adminSnapshot {
-			if err := conn.WriteJSON(msg); err != nil {
-				hub.UnregisterClient(adminID, "admin")
+		for _, client := range adminSnapshot {
+			if err := client.conn.WriteJSON(msg); err != nil {
+				hub.UnregisterClient(client.userID, client.role, client.conn)
 			}
 		}
 
-		if userConn != nil {
-			if err := userConn.WriteJSON(msg); err != nil {
-				hub.UnregisterClient(msg.UserID, "user")
+		for _, client := range userSnapshot {
+			if err := client.conn.WriteJSON(msg); err != nil {
+				hub.UnregisterClient(client.userID, client.role, client.conn)
 			}
 		}
 	}
 }
 
-func (hub *WebSocketHub) snapshotConnections(userID string) (map[string]*websocket.Conn, *websocket.Conn) {
+func (hub *WebSocketHub) snapshotConnections(userID string) ([]clientConnection, []clientConnection) {
 	hub.clientsMu.RLock()
 	defer hub.clientsMu.RUnlock()
 
-	adminSnapshot := make(map[string]*websocket.Conn, len(hub.adminClients))
-	for id, conn := range hub.adminClients {
-		adminSnapshot[id] = conn
+	adminSnapshot := make([]clientConnection, 0, len(hub.adminClients))
+	for id, conns := range hub.adminClients {
+		for conn := range conns {
+			adminSnapshot = append(adminSnapshot, clientConnection{userID: id, role: "admin", conn: conn})
+		}
 	}
 
-	var userConn *websocket.Conn
+	userSnapshot := make([]clientConnection, 0)
 	if userID != "" {
-		userConn = hub.userClients[userID]
+		for conn := range hub.userClients[userID] {
+			userSnapshot = append(userSnapshot, clientConnection{userID: userID, role: "user", conn: conn})
+		}
 	}
 
-	return adminSnapshot, userConn
+	return adminSnapshot, userSnapshot
 }
 
 func (hub *WebSocketHub) RegisterClient(userID string, role string, conn *websocket.Conn) {
 	hub.clientsMu.Lock()
+	defer hub.clientsMu.Unlock()
+
 	if role == "admin" {
-		hub.adminClients[userID] = conn
+		if hub.adminClients[userID] == nil {
+			hub.adminClients[userID] = make(map[*websocket.Conn]struct{})
+		}
+		hub.adminClients[userID][conn] = struct{}{}
 	} else {
-		hub.userClients[userID] = conn
+		if hub.userClients[userID] == nil {
+			hub.userClients[userID] = make(map[*websocket.Conn]struct{})
+		}
+		hub.userClients[userID][conn] = struct{}{}
 	}
-	hub.clientsMu.Unlock()
 }
 
-func (hub *WebSocketHub) UnregisterClient(userID string, role string) {
+func (hub *WebSocketHub) UnregisterClient(userID string, role string, conn *websocket.Conn) {
 	hub.clientsMu.Lock()
+	defer hub.clientsMu.Unlock()
+
 	if role == "admin" {
-		if conn, ok := hub.adminClients[userID]; ok {
+		if conns, ok := hub.adminClients[userID]; ok {
 			conn.Close()
-			delete(hub.adminClients, userID)
+			delete(conns, conn)
+			if len(conns) == 0 {
+				delete(hub.adminClients, userID)
+			}
 		}
 	} else {
-		if conn, ok := hub.userClients[userID]; ok {
+		if conns, ok := hub.userClients[userID]; ok {
 			conn.Close()
-			delete(hub.userClients, userID)
+			delete(conns, conn)
+			if len(conns) == 0 {
+				delete(hub.userClients, userID)
+			}
 		}
 	}
-	hub.clientsMu.Unlock()
 }
 
-func (hub *WebSocketHub) Broadcast(msg WebSocketMessage) {
-	hub.broadcast <- msg
+func (hub *WebSocketHub) Broadcast(msg WebSocketMessage) error {
+	select {
+	case hub.broadcast <- msg:
+		return nil
+	default:
+		return ErrBroadcastQueueFull
+	}
 }

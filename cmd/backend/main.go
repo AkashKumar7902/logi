@@ -53,6 +53,17 @@ func main() {
 			utils.Fatal("failed to connect to nats", "error", err)
 		}
 		defer natsClient.Conn.Close()
+		subscription, err := natsClient.SubscribeAll(func(message messaging.Message) error {
+			return wsHub.Broadcast(websocket.WebSocketMessage{
+				UserID:  message.UserID,
+				Type:    message.Type,
+				Payload: message.Payload,
+			})
+		})
+		if err != nil {
+			utils.Fatal("failed to subscribe to nats", "error", err)
+		}
+		defer subscription.Unsubscribe()
 		messagingClient = natsClient
 	} else {
 		messagingClient = messaging.NewWebSocketClient(wsHub)
@@ -76,7 +87,7 @@ func main() {
 	userService := services.NewUserService(userRepo, bookingRepo, driverRepo, authService)
 	bookingService := services.NewBookingService(bookingRepo, driverRepo, pricingService, messagingClient)
 	driverService := services.NewDriverService(driverRepo, bookingRepo, userRepo, *bookingService, authService, messagingClient)
-	adminService := services.NewAdminService(adminRepo, authService, userRepo, driverRepo, bookingRepo)
+	adminService := services.NewAdminService(adminRepo, authService, userRepo, driverRepo, bookingRepo, vehicleRepo)
 	vehicleService := services.NewVehicleService(vehicleRepo)
 
 	userHandler := handlers.NewUserHandler(userService, authService)

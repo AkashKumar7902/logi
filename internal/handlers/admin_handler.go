@@ -111,26 +111,22 @@ func (h *AdminHandler) GetDriver(c *gin.Context) {
 func (h *AdminHandler) UpdateDriver(c *gin.Context) {
 	ctx := c.Request.Context()
 	driverID := c.Param("driverID")
-	var driver models.Driver
-	if err := c.BindJSON(&driver); err != nil {
+	var payload struct {
+		VehicleID string `json:"vehicle_id"`
+	}
+	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
-	oldDriver, err := h.DriverService.GetDriverByID(ctx, driverID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Driver not found"})
-		return
-	}
-	if driver.VehicleID != "" {
-		oldDriver.VehicleID = driver.VehicleID
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "A vehicle has already been assigned to this driver"})
+
+	if payload.VehicleID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "vehicle_id is required"})
 		return
 	}
 
-	err = h.DriverService.UpdateDriver(ctx, oldDriver)
+	err := h.Service.AssignVehicleToDriver(ctx, driverID, payload.VehicleID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update driver"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Driver updated successfully"})
@@ -162,13 +158,38 @@ func (h *AdminHandler) UpdateVehicle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
-	vehicle.ID = vehicleID
-	err := h.VehicleService.UpdateVehicle(ctx, &vehicle)
+
+	existingVehicle, err := h.VehicleService.GetVehicleByID(ctx, vehicleID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
+		return
+	}
+
+	if vehicle.Make != "" {
+		existingVehicle.Make = vehicle.Make
+	}
+	if vehicle.Model != "" {
+		existingVehicle.Model = vehicle.Model
+	}
+	if vehicle.Year != 0 {
+		existingVehicle.Year = vehicle.Year
+	}
+	if vehicle.LicensePlate != "" {
+		existingVehicle.LicensePlate = vehicle.LicensePlate
+	}
+	if vehicle.VehicleType != "" {
+		existingVehicle.VehicleType = vehicle.VehicleType
+	}
+	if vehicle.DriverID != "" {
+		existingVehicle.DriverID = vehicle.DriverID
+	}
+
+	err = h.VehicleService.UpdateVehicle(ctx, existingVehicle)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update vehicle"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Vehicle updated successfully", "vehicle": vehicle})
+	c.JSON(http.StatusOK, gin.H{"message": "Vehicle updated successfully", "vehicle": existingVehicle})
 }
 
 func (h *AdminHandler) DeleteVehicle(c *gin.Context) {

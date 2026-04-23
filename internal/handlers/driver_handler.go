@@ -25,9 +25,10 @@ func (h *DriverHandler) Register(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var payload struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Name        string `json:"name"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		VehicleType string `json:"vehicle_type"`
 	}
 
 	if err := c.BindJSON(&payload); err != nil {
@@ -36,8 +37,9 @@ func (h *DriverHandler) Register(c *gin.Context) {
 	}
 
 	driver := &models.Driver{
-		Name:  payload.Name,
-		Email: payload.Email,
+		Name:        payload.Name,
+		Email:       payload.Email,
+		VehicleType: payload.VehicleType,
 	}
 
 	err := h.Service.Register(ctx, driver, payload.Password)

@@ -47,7 +47,7 @@ func (s *DriverService) Register(ctx context.Context, driver *models.Driver, pas
 
 	driver.ID = uuid.NewString()
 	driver.PasswordHash = hashedPassword
-	driver.Status = "Available"
+	driver.Status = models.DriverStatusAvailable
 	driver.CreatedAt = time.Now()
 	driver.AcceptedBookingsCount = 0
 	driver.TotalBookingsCount = 0
@@ -105,11 +105,11 @@ func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string
 
 	// Validate status transition
 	validTransitions := map[string][]string{
-		"Driver Assigned":    {"En Route to Pickup"},
-		"En Route to Pickup": {"Goods Collected"},
-		"Goods Collected":    {"In Transit"},
-		"In Transit":         {"Delivered"},
-		"Delivered":          {"Completed"},
+		models.BookingStatusDriverAssigned:  {models.BookingStatusEnRouteToPickup},
+		models.BookingStatusEnRouteToPickup: {models.BookingStatusGoodsCollected},
+		models.BookingStatusGoodsCollected:  {models.BookingStatusInTransit},
+		models.BookingStatusInTransit:       {models.BookingStatusDelivered},
+		models.BookingStatusDelivered:       {models.BookingStatusCompleted},
 	}
 
 	currentStatus := booking.Status
@@ -120,13 +120,15 @@ func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string
 	// Update timestamps based on status
 	currentTime := time.Now()
 	switch status {
-	case "In Transit":
+	case models.BookingStatusInTransit:
 		if booking.StartedAt == nil {
 			booking.StartedAt = &currentTime
 		}
-	case "Completed":
+	case models.BookingStatusCompleted:
 		if booking.CompletedAt == nil {
-			s.Repo.IncrementCompletedBookings(ctx, driverID)
+			if incrementErr := s.Repo.IncrementCompletedBookings(ctx, driverID); incrementErr != nil {
+				utils.Warn(ctx, "failed to increment completed bookings", "driver_id", driverID, "booking_id", bookingID, "error", incrementErr)
+			}
 			booking.CompletedAt = &currentTime
 		}
 	}
@@ -138,19 +140,21 @@ func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string
 	}
 
 	// Notify user about status update
-	s.MessagingClient.Publish(booking.UserID, "status_update", map[string]interface{}{
+	if publishErr := s.MessagingClient.Publish(booking.UserID, "status_update", map[string]interface{}{
 		"booking_id": booking.ID,
 		"status":     status,
-	})
+	}); publishErr != nil {
+		utils.Warn(ctx, "failed to publish booking status update", "booking_id", booking.ID, "user_id", booking.UserID, "error", publishErr)
+	}
 
 	// If booking is marked as completed, update driver's status to Available
-	if status == "Completed" {
+	if status == models.BookingStatusCompleted {
 		clearCurrentBookingErr := s.Repo.UpdateCurrentBookingID(ctx, driverID, "")
 		if clearCurrentBookingErr != nil {
 			utils.Warn(ctx, "failed to clear current booking", "driver_id", driverID, "booking_id", bookingID, "error", clearCurrentBookingErr)
 		}
 
-		err = s.UpdateStatus(ctx, booking.DriverID, "Available")
+		err = s.UpdateStatus(ctx, booking.DriverID, models.DriverStatusAvailable)
 		if err != nil {
 			return errors.New("failed to update driver status to Available")
 		}
@@ -177,11 +181,13 @@ func (s *DriverService) UpdateLocation(ctx context.Context, driverID string, lat
 	}
 
 	// Notify user about driver's location update
-	s.MessagingClient.Publish(booking.UserID, "driver_location", map[string]interface{}{
+	if publishErr := s.MessagingClient.Publish(booking.UserID, "driver_location", map[string]interface{}{
 		"booking_id": booking.ID,
 		"latitude":   latitude,
 		"longitude":  longitude,
-	})
+	}); publishErr != nil {
+		utils.Warn(ctx, "failed to publish driver location", "booking_id", booking.ID, "user_id", booking.UserID, "error", publishErr)
+	}
 
 	return nil
 }
@@ -203,17 +209,18 @@ func (s *DriverService) GetPendingBookings(ctx context.Context, driverID string)
 }
 
 func (s *DriverService) RespondToBooking(ctx context.Context, driverID, bookingID, response string) error {
+	if response != "accept" && response != "reject" {
+		return errors.New("invalid response")
+	}
+
 	err := s.Repo.IncrementTotalBookings(ctx, driverID)
 	if err != nil {
-		// Log the error but do not fail the operation
 		utils.Warn(ctx, "failed to increment total bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
 	}
 	if response == "accept" {
 		return s.BookingService.DriverAcceptsBooking(ctx, driverID, bookingID)
-	} else if response == "reject" {
-		return s.BookingService.DriverRejectsBooking(ctx, driverID, bookingID)
 	}
-	return errors.New("invalid response")
+	return s.BookingService.DriverRejectsBooking(ctx, driverID, bookingID)
 }
 
 func (s *DriverService) GetActiveBookings(ctx context.Context, driverID string) ([]*models.Booking, error) {

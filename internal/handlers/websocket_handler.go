@@ -47,7 +47,7 @@ func ServeWs(authService *auth.AuthService, hub *websocket.WebSocketHub, allowed
 	hub.RegisterClient(userID, role, conn)
 
 	go func() {
-		defer hub.UnregisterClient(userID, role)
+		defer hub.UnregisterClient(userID, role, conn)
 		for {
 			if _, _, readErr := conn.ReadMessage(); readErr != nil {
 				break

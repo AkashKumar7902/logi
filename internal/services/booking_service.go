@@ -43,7 +43,7 @@ func (s *BookingService) CreateBooking(ctx context.Context, userID string, booki
 		DropoffLocation:      bookingReq.DropoffLocation,
 		VehicleType:          bookingReq.VehicleType,
 		PriceEstimate:        price,
-		Status:               "Pending",
+		Status:               models.BookingStatusPending,
 		DriverResponseStatus: "Pending",
 		CreatedAt:            time.Now(),
 	}
@@ -77,6 +77,14 @@ func (s *BookingService) AssignBookingToDrivers(ctx context.Context, booking *mo
 }
 
 func (s *BookingService) assignBookingToDrivers(ctx context.Context, booking *models.Booking, excludedDriverIDs map[string]struct{}) error {
+	excluded := make(map[string]struct{}, len(booking.RejectedDriverIDs)+len(excludedDriverIDs))
+	for _, driverID := range booking.RejectedDriverIDs {
+		excluded[driverID] = struct{}{}
+	}
+	for driverID := range excludedDriverIDs {
+		excluded[driverID] = struct{}{}
+	}
+
 	drivers, err := s.DriverRepo.FindAvailableDrivers(
 		ctx,
 		booking.PickupLocation,
@@ -88,25 +96,35 @@ func (s *BookingService) assignBookingToDrivers(ctx context.Context, booking *mo
 		return errors.New("no available drivers")
 	}
 
-	publishedCount := 0
+	recipientDrivers := make([]*models.Driver, 0, len(drivers))
 	for _, driver := range drivers {
-		if excludedDriverIDs != nil {
-			if _, excluded := excludedDriverIDs[driver.ID]; excluded {
-				continue
-			}
+		if _, skip := excluded[driver.ID]; skip {
+			continue
 		}
+		recipientDrivers = append(recipientDrivers, driver)
+	}
 
+	booking.OfferedDriverIDs = make([]string, 0, len(recipientDrivers))
+	for _, driver := range recipientDrivers {
+		booking.OfferedDriverIDs = append(booking.OfferedDriverIDs, driver.ID)
+	}
+	if err := s.Repo.Update(ctx, booking); err != nil {
+		return err
+	}
+
+	if len(recipientDrivers) == 0 {
+		utils.Warn(ctx, "booking request had no eligible recipients", "booking_id", booking.ID)
+		return errors.New("no eligible drivers available")
+	}
+
+	publishedCount := 0
+	for _, driver := range recipientDrivers {
 		err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
 		if err != nil {
 			utils.Warn(ctx, "failed to send booking request to driver", "booking_id", booking.ID, "driver_id", driver.ID, "error", err)
 			continue
 		}
 		publishedCount++
-	}
-
-	if publishedCount == 0 {
-		utils.Warn(ctx, "booking request had no eligible recipients", "booking_id", booking.ID)
-		return errors.New("no eligible drivers available")
 	}
 
 	utils.Info(ctx, "booking request dispatched", "booking_id", booking.ID, "recipient_count", publishedCount)
@@ -122,6 +140,8 @@ func (s *BookingService) ActivateScheduledBookings(ctx context.Context) error {
 	for _, booking := range bookings {
 		// Update booking status to indicate it's now active and awaiting driver response
 		booking.DriverResponseStatus = "Pending"
+		booking.OfferedDriverIDs = nil
+		booking.RejectedDriverIDs = nil
 		err := s.Repo.Update(ctx, booking)
 		if err != nil {
 			utils.Error(ctx, "failed to update scheduled booking status", "booking_id", booking.ID, "error", err)
@@ -181,7 +201,7 @@ func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, boo
 		utils.Warn(ctx, "failed to increment accepted bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
 	}
 
-	err = s.DriverRepo.UpdateStatus(ctx, driverID, "Busy")
+	err = s.DriverRepo.UpdateStatus(ctx, driverID, models.DriverStatusBusy)
 	if err != nil {
 		return err
 	}
@@ -189,7 +209,7 @@ func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, boo
 	// Publish the status update to admins via MessagingClient
 	publishErr := s.MessagingClient.Publish("", "driver_status_update", map[string]interface{}{
 		"driver_id": driverID,
-		"status":    "Busy",
+		"status":    models.DriverStatusBusy,
 	})
 	if publishErr != nil {
 		// Log the error but do not fail the operation
@@ -215,12 +235,23 @@ func (s *BookingService) DriverRejectsBooking(ctx context.Context, driverID, boo
 		return err
 	}
 
-	if booking.DriverID != "" || booking.Status != "Pending" {
+	if booking.DriverID != "" || booking.Status != models.BookingStatusPending {
 		return errors.New("booking already accepted or unavailable")
 	}
 
+	alreadyRejected := false
+	for _, rejectedDriverID := range booking.RejectedDriverIDs {
+		if rejectedDriverID == driverID {
+			alreadyRejected = true
+			break
+		}
+	}
+	if !alreadyRejected {
+		booking.RejectedDriverIDs = append(booking.RejectedDriverIDs, driverID)
+	}
+
 	// Reassign booking to other eligible drivers, excluding rejecting driver.
-	err = s.assignBookingToDrivers(ctx, booking, map[string]struct{}{driverID: {}})
+	err = s.assignBookingToDrivers(ctx, booking, nil)
 	if err != nil {
 		return err
 	}
