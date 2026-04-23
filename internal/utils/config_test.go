@@ -68,3 +68,38 @@ func TestLoadConfigRejectsPlaceholderJWTSecretInCloudRuntime(t *testing.T) {
 		t.Fatalf("expected JWT env guidance in error, got %v", err)
 	}
 }
+
+func TestLoadConfigReadsAdminBootstrapSettingsFromEnv(t *testing.T) {
+	t.Setenv("MONGODB_URI", "mongodb+srv://user:pass@example.mongodb.net/logi")
+	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("LOGI_ENABLE_ADMIN_BOOTSTRAP", "true")
+	t.Setenv("LOGI_ADMIN_BOOTSTRAP_SECRET", "bootstrap-secret-0123456789abcdef")
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+
+	if !cfg.EnableAdminBootstrap {
+		t.Fatal("expected admin bootstrap to be enabled from env")
+	}
+	if cfg.AdminBootstrapSecret != "bootstrap-secret-0123456789abcdef" {
+		t.Fatalf("expected admin bootstrap secret from env, got %q", cfg.AdminBootstrapSecret)
+	}
+}
+
+func TestLoadConfigRequiresAdminBootstrapSecretWhenEnabled(t *testing.T) {
+	t.Setenv("MONGODB_URI", "mongodb+srv://user:pass@example.mongodb.net/logi")
+	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
+	t.Setenv("LOGI_ENABLE_ADMIN_BOOTSTRAP", "true")
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Fatal("expected config validation error when admin bootstrap is enabled without a secret")
+	}
+	if !strings.Contains(err.Error(), "LOGI_ADMIN_BOOTSTRAP_SECRET") {
+		t.Fatalf("expected admin bootstrap env guidance in error, got %v", err)
+	}
+}

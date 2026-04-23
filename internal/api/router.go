@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"strings"
 	"time"
 
 	"logi/internal/handlers"
@@ -12,6 +14,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
+
+const adminBootstrapSecretHeader = "X-Admin-Bootstrap-Secret"
 
 func corsMiddleware(cfg *utils.Config) gin.HandlerFunc {
 	config := cors.Config{
@@ -37,6 +41,20 @@ func corsMiddleware(cfg *utils.Config) gin.HandlerFunc {
 	}
 
 	return cors.New(config)
+}
+
+func adminBootstrapMiddleware(cfg *utils.Config) gin.HandlerFunc {
+	expectedSecret := strings.TrimSpace(cfg.AdminBootstrapSecret)
+
+	return func(c *gin.Context) {
+		providedSecret := strings.TrimSpace(c.GetHeader(adminBootstrapSecretHeader))
+		if providedSecret == "" || subtle.ConstantTimeCompare([]byte(providedSecret), []byte(expectedSecret)) != 1 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid bootstrap secret"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 
 func SetupRouter(
@@ -68,8 +86,10 @@ func SetupRouter(
 	router.POST("/users/login", userHandler.Login)
 	router.POST("/drivers/register", driverHandler.Register)
 	router.POST("/drivers/login", driverHandler.Login)
-	router.POST("/admins/register", adminHandler.Register)
 	router.POST("/admins/login", adminHandler.Login)
+	if cfg.EnableAdminBootstrap {
+		router.POST("/internal/bootstrap/admin", adminBootstrapMiddleware(cfg), adminHandler.RegisterBootstrap)
+	}
 
 	router.GET("/ws", func(c *gin.Context) {
 		handlers.ServeWs(authService, wsHub, cfg.AllowedOriginsSet(), c)

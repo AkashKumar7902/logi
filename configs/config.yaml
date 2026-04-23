@@ -18,6 +18,8 @@ allowed_origins:
   - "http://localhost:3000"
 
 # Operational toggles
+enable_admin_bootstrap: false
+admin_bootstrap_secret: ""
 enable_test_routes: false
 
 # Database operation timeout per query/update

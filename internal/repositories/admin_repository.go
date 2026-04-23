@@ -13,6 +13,7 @@ import (
 type AdminRepository interface {
 	Create(ctx context.Context, admin *models.Admin) error
 	FindByEmail(ctx context.Context, email string) (*models.Admin, error)
+	HasAny(ctx context.Context) (bool, error)
 }
 
 type adminRepository struct {
@@ -49,4 +50,22 @@ func (r *adminRepository) FindByEmail(ctx context.Context, email string) (*model
 		return nil, err
 	}
 	return &admin, nil
+}
+
+func (r *adminRepository) HasAny(ctx context.Context) (bool, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	err := r.collection.FindOne(
+		opCtx,
+		bson.M{},
+		options.FindOne().SetProjection(bson.M{"_id": 1}),
+	).Err()
+	if err == mongo.ErrNoDocuments {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

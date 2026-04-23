@@ -20,6 +20,8 @@ type Config struct {
 	DistanceCalculatorType    string   `yaml:"distance_calculator_type"`
 	GoogleMapsAPIKey          string   `yaml:"google_maps_api_key"`
 	AllowedOrigins            []string `yaml:"allowed_origins"`
+	EnableAdminBootstrap      bool     `yaml:"enable_admin_bootstrap"`
+	AdminBootstrapSecret      string   `yaml:"admin_bootstrap_secret"`
 	EnableTestRoutes          bool     `yaml:"enable_test_routes"`
 	DBOperationTimeoutSeconds int      `yaml:"db_operation_timeout_seconds"`
 	HTTPReadTimeoutSeconds    int      `yaml:"http_read_timeout_seconds"`
@@ -68,6 +70,7 @@ func defaultConfig() Config {
 		MessagingType:             "websocket",
 		DistanceCalculatorType:    "haversine",
 		AllowedOrigins:            []string{"http://localhost:3000"},
+		EnableAdminBootstrap:      false,
 		EnableTestRoutes:          false,
 		DBOperationTimeoutSeconds: 5,
 		HTTPReadTimeoutSeconds:    15,
@@ -91,6 +94,8 @@ func overrideFromEnv(cfg *Config) {
 	applyStringEnvWithFallback(&cfg.DistanceCalculatorType, "LOGI_DISTANCE_CALCULATOR_TYPE")
 	applyStringEnvWithFallback(&cfg.GoogleMapsAPIKey, "LOGI_GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_API_KEY")
 	applyCSVEnvWithFallback(&cfg.AllowedOrigins, "LOGI_ALLOWED_ORIGINS", "ALLOWED_ORIGINS")
+	applyBoolEnv(&cfg.EnableAdminBootstrap, "LOGI_ENABLE_ADMIN_BOOTSTRAP")
+	applyStringEnv(&cfg.AdminBootstrapSecret, "LOGI_ADMIN_BOOTSTRAP_SECRET")
 	applyBoolEnv(&cfg.EnableTestRoutes, "LOGI_ENABLE_TEST_ROUTES")
 	applyIntEnv(&cfg.DBOperationTimeoutSeconds, "LOGI_DB_OPERATION_TIMEOUT_SECONDS")
 	applyIntEnv(&cfg.HTTPReadTimeoutSeconds, "LOGI_HTTP_READ_TIMEOUT_SECONDS")
@@ -111,6 +116,9 @@ func validateConfig(cfg *Config) error {
 	}
 	if (cfg.Environment == "production" || isCloudRuntime()) && isPlaceholderSecret(cfg.JWTSecret) {
 		return fmt.Errorf("jwt_secret placeholder detected; set LOGI_JWT_SECRET or JWT_SECRET to a strong random value")
+	}
+	if cfg.EnableAdminBootstrap && len(strings.TrimSpace(cfg.AdminBootstrapSecret)) < 32 {
+		return fmt.Errorf("admin_bootstrap_secret must be at least 32 characters when admin bootstrap is enabled (set LOGI_ADMIN_BOOTSTRAP_SECRET)")
 	}
 
 	switch cfg.MessagingType {

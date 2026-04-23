@@ -11,6 +11,33 @@ type publishedMessage struct {
 	payload     interface{}
 }
 
+type fakeAdminRepository struct {
+	createFn      func(context.Context, *models.Admin) error
+	findByEmailFn func(context.Context, string) (*models.Admin, error)
+	hasAnyFn      func(context.Context) (bool, error)
+}
+
+func (f *fakeAdminRepository) Create(ctx context.Context, admin *models.Admin) error {
+	if f.createFn != nil {
+		return f.createFn(ctx, admin)
+	}
+	return nil
+}
+
+func (f *fakeAdminRepository) FindByEmail(ctx context.Context, email string) (*models.Admin, error) {
+	if f.findByEmailFn != nil {
+		return f.findByEmailFn(ctx, email)
+	}
+	return nil, nil
+}
+
+func (f *fakeAdminRepository) HasAny(ctx context.Context) (bool, error) {
+	if f.hasAnyFn != nil {
+		return f.hasAnyFn(ctx)
+	}
+	return false, nil
+}
+
 type fakeMessagingClient struct {
 	published  []publishedMessage
 	publishErr error

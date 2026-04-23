@@ -9,6 +9,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+var (
+	ErrAdminAlreadyExists             = errors.New("admin already exists")
+	ErrAdminBootstrapAlreadyCompleted = errors.New("admin bootstrap is only allowed before the first admin account exists")
 )
 
 type AdminService struct {
@@ -32,9 +38,12 @@ func NewAdminService(repo repositories.AdminRepository, authService *auth.AuthSe
 }
 
 func (s *AdminService) Register(ctx context.Context, admin *models.Admin, password string) error {
-	existingAdmin, _ := s.Repo.FindByEmail(ctx, admin.Email)
-	if existingAdmin != nil {
-		return errors.New("admin already exists")
+	existingAdmin, err := s.Repo.FindByEmail(ctx, admin.Email)
+	if err == nil && existingAdmin != nil {
+		return ErrAdminAlreadyExists
+	}
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return err
 	}
 
 	hashedPassword, err := s.AuthService.HashPassword(password)
@@ -47,6 +56,17 @@ func (s *AdminService) Register(ctx context.Context, admin *models.Admin, passwo
 	admin.CreatedAt = time.Now()
 
 	return s.Repo.Create(ctx, admin)
+}
+
+func (s *AdminService) RegisterBootstrap(ctx context.Context, admin *models.Admin, password string) error {
+	hasAnyAdmins, err := s.Repo.HasAny(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAnyAdmins {
+		return ErrAdminBootstrapAlreadyCompleted
+	}
+	return s.Register(ctx, admin, password)
 }
 
 func (s *AdminService) Login(ctx context.Context, email, password string) (*models.Admin, error) {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"logi/internal/models"
 	"logi/internal/services"
 	"logi/pkg/auth"
@@ -29,9 +30,7 @@ func NewAdminHandler(service *services.AdminService, authService *auth.AuthServi
 	}
 }
 
-func (h *AdminHandler) Register(c *gin.Context) {
-	ctx := c.Request.Context()
-
+func bindAdminRegistrationPayload(c *gin.Context) (*models.Admin, string, bool) {
 	var payload struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
@@ -40,7 +39,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
+		return nil, "", false
 	}
 
 	admin := &models.Admin{
@@ -48,13 +47,29 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		Email: payload.Email,
 	}
 
-	err := h.Service.Register(ctx, admin, payload.Password)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	return admin, payload.Password, true
+}
+
+func (h *AdminHandler) RegisterBootstrap(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	admin, password, ok := bindAdminRegistrationPayload(c)
+	if !ok {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Admin registered successfully"})
+	err := h.Service.RegisterBootstrap(ctx, admin, password)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrAdminAlreadyExists), errors.Is(err, services.ErrAdminBootstrapAlreadyCompleted):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to bootstrap admin"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Admin bootstrapped successfully"})
 }
 
 func (h *AdminHandler) Login(c *gin.Context) {

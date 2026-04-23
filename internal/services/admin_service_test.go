@@ -2,9 +2,14 @@ package services
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"logi/internal/models"
+	"logi/pkg/auth"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func TestAdminServiceAssignVehicleToDriverUpdatesBothSides(t *testing.T) {
@@ -59,5 +64,77 @@ func TestAdminServiceAssignVehicleToDriverUpdatesBothSides(t *testing.T) {
 	}
 	if vehicleAssignmentID != "vehicle-1" || vehicleAssignmentDriverID != "driver-1" {
 		t.Fatalf("vehicle assignment not updated correctly: %s %s", vehicleAssignmentID, vehicleAssignmentDriverID)
+	}
+}
+
+func TestAdminServiceRegisterBootstrapCreatesFirstAdmin(t *testing.T) {
+	t.Parallel()
+
+	var createdAdmin *models.Admin
+	authService := auth.NewAuthService(strings.Repeat("a", 32), 72)
+	service := NewAdminService(
+		&fakeAdminRepository{
+			hasAnyFn: func(ctx context.Context) (bool, error) {
+				return false, nil
+			},
+			findByEmailFn: func(ctx context.Context, email string) (*models.Admin, error) {
+				return nil, mongo.ErrNoDocuments
+			},
+			createFn: func(ctx context.Context, admin *models.Admin) error {
+				createdAdmin = admin
+				return nil
+			},
+		},
+		authService,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	err := service.RegisterBootstrap(context.Background(), &models.Admin{
+		Name:  "Admin",
+		Email: "admin@example.com",
+	}, "super-secret-password")
+	if err != nil {
+		t.Fatalf("RegisterBootstrap returned error: %v", err)
+	}
+
+	if createdAdmin == nil {
+		t.Fatal("expected admin to be created")
+	}
+	if createdAdmin.ID == "" {
+		t.Fatal("expected bootstrap admin ID to be assigned")
+	}
+	if createdAdmin.PasswordHash == "" {
+		t.Fatal("expected bootstrap admin password to be hashed")
+	}
+	if createdAdmin.PasswordHash == "super-secret-password" {
+		t.Fatal("expected bootstrap admin password hash to differ from plaintext password")
+	}
+}
+
+func TestAdminServiceRegisterBootstrapRejectsAfterFirstAdmin(t *testing.T) {
+	t.Parallel()
+
+	service := NewAdminService(
+		&fakeAdminRepository{
+			hasAnyFn: func(ctx context.Context) (bool, error) {
+				return true, nil
+			},
+		},
+		auth.NewAuthService(strings.Repeat("a", 32), 72),
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	err := service.RegisterBootstrap(context.Background(), &models.Admin{
+		Name:  "Admin",
+		Email: "admin@example.com",
+	}, "super-secret-password")
+	if !errors.Is(err, ErrAdminBootstrapAlreadyCompleted) {
+		t.Fatalf("expected ErrAdminBootstrapAlreadyCompleted, got %v", err)
 	}
 }

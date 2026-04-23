@@ -634,39 +634,6 @@ paths:
                     type: string
                     example: "Invalid email or password"
 
-  /admins/register:
-    post:
-      tags:
-        - Authentication
-      summary: Register a new admin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AdminRegistrationRequest'
-      responses:
-        "201":
-          description: Admin registered successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Admin registered successfully"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Admin already exists"
-
   /admins/login:
     post:
       tags:
@@ -2542,4 +2509,3 @@ components:
 
 security:
   - BearerAuth: []
-
