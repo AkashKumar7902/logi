@@ -16,7 +16,8 @@ import (
 func corsMiddleware(cfg *utils.Config) gin.HandlerFunc {
 	config := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization", utils.RequestIDHeader},
+		ExposeHeaders:    []string{utils.RequestIDHeader},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}
@@ -49,8 +50,9 @@ func SetupRouter(
 	cfg *utils.Config,
 ) *gin.Engine {
 	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
+	router.Use(utils.RequestIDMiddleware())
+	router.Use(utils.RequestLoggingMiddleware())
+	router.Use(utils.RecoveryMiddleware())
 	router.Use(corsMiddleware(cfg))
 
 	router.GET("/healthz", func(c *gin.Context) {

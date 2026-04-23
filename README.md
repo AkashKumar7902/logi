@@ -23,6 +23,25 @@
 - `LOGI_ENABLE_TEST_ROUTES=false`
 - `LOGI_DB_OPERATION_TIMEOUT_SECONDS=5`
 
+### Render Deploy
+Render injects a `PORT` environment variable for web services, and the backend now uses it automatically if `LOGI_SERVER_ADDRESS` is not set. The backend also accepts these standard cloud aliases:
+
+- `PORT`
+- `MONGODB_URI` or `MONGO_URI`
+- `JWT_SECRET`
+- `ALLOWED_ORIGINS`
+
+Minimum Render env setup:
+
+```env
+LOGI_ENVIRONMENT=production
+MONGODB_URI=<your MongoDB Atlas or managed MongoDB URI>
+JWT_SECRET=<32+ char random secret>
+ALLOWED_ORIGINS=https://your-frontend.onrender.com
+```
+
+If `MONGODB_URI` is missing, or still points to `localhost`, startup now fails fast with a config error instead of timing out against `localhost:27017`.
+
 ### Operational Endpoints
 - `GET /healthz`
 - `GET /readyz`

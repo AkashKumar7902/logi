@@ -26,7 +26,7 @@ func NewAdminRepository(dbClient *mongo.Client) AdminRepository {
 		Options: options.Index().SetUnique(true).SetName("admins_email_unique"),
 	})
 	if err != nil {
-		utils.Logger.Printf("Failed to create admin email index: %v", err)
+		utils.ErrorBackground("failed to create admin email index", "error", err)
 	}
 	return &adminRepository{collection}
 }

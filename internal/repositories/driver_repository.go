@@ -52,7 +52,7 @@ func NewDriverRepository(dbClient *mongo.Client) DriverRepository {
 	}
 	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
 	if err != nil {
-		utils.Logger.Printf("Failed to create driver indexes: %v", err)
+		utils.ErrorBackground("failed to create driver indexes", "error", err)
 	}
 
 	return &driverRepository{collection}
@@ -72,7 +72,6 @@ func (r *driverRepository) Create(ctx context.Context, driver *models.Driver) er
 		driver.VehicleType = "car"
 	}
 	_, err := r.collection.InsertOne(opCtx, driver)
-	utils.Logger.Println(err)
 	return err
 }
 
@@ -91,8 +90,6 @@ func (r *driverRepository) FindByEmail(ctx context.Context, email string) (*mode
 func (r *driverRepository) FindAvailableDrivers(ctx context.Context, location models.Location, vehicleType string) ([]*models.Driver, error) {
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
-
-	utils.Logger.Println(location)
 
 	filter := bson.M{
 		"status":       "Available",
@@ -160,7 +157,6 @@ func (r *driverRepository) GetAllDrivers(ctx context.Context) ([]*models.Driver,
 		}
 		drivers = append(drivers, &driver)
 	}
-	utils.Logger.Println("drivers ", drivers)
 	return drivers, nil
 }
 

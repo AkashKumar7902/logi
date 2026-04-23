@@ -5,7 +5,6 @@ import (
 	"errors"
 	"logi/internal/models"
 	"logi/internal/repositories"
-	"logi/internal/utils"
 	"logi/pkg/auth"
 	"time"
 
@@ -85,7 +84,6 @@ func (s *UserService) GetDriverForBooking(ctx context.Context, userID, bookingID
 		return nil, errors.New("no driver assigned to the booking")
 	}
 
-	utils.Logger.Println(booking.DriverID)
 	// Fetch the driver assigned to the booking
 	driver, err := s.DriverRepo.FindByID(ctx, booking.DriverID)
 	if err != nil {

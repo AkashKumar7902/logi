@@ -84,7 +84,7 @@ func (s *DriverService) UpdateStatus(ctx context.Context, driverID, status strin
 	})
 	if publishErr != nil {
 		// Log the error but do not fail the operation
-		utils.Logger.Printf("Failed to publish driver status update: %v", publishErr)
+		utils.Warn(ctx, "failed to publish driver status update", "driver_id", driverID, "status", status, "error", publishErr)
 	}
 
 	return nil
@@ -147,7 +147,7 @@ func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string
 	if status == "Completed" {
 		clearCurrentBookingErr := s.Repo.UpdateCurrentBookingID(ctx, driverID, "")
 		if clearCurrentBookingErr != nil {
-			utils.Logger.Printf("Failed to clear current booking for driver %s: %v", driverID, clearCurrentBookingErr)
+			utils.Warn(ctx, "failed to clear current booking", "driver_id", driverID, "booking_id", bookingID, "error", clearCurrentBookingErr)
 		}
 
 		err = s.UpdateStatus(ctx, booking.DriverID, "Available")
@@ -206,7 +206,7 @@ func (s *DriverService) RespondToBooking(ctx context.Context, driverID, bookingI
 	err := s.Repo.IncrementTotalBookings(ctx, driverID)
 	if err != nil {
 		// Log the error but do not fail the operation
-		utils.Logger.Printf("Failed to increment total bookings for driver %s: %v", driverID, err)
+		utils.Warn(ctx, "failed to increment total bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
 	}
 	if response == "accept" {
 		return s.BookingService.DriverAcceptsBooking(ctx, driverID, bookingID)

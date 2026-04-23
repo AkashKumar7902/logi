@@ -78,16 +78,19 @@ func defaultConfig() Config {
 }
 
 func overrideFromEnv(cfg *Config) {
-	applyStringEnv(&cfg.Environment, "LOGI_ENVIRONMENT")
+	applyStringEnvWithFallback(&cfg.Environment, "LOGI_ENVIRONMENT", "ENVIRONMENT")
 	applyStringEnv(&cfg.ServerAddress, "LOGI_SERVER_ADDRESS")
-	applyStringEnv(&cfg.MongoURI, "LOGI_MONGO_URI")
-	applyStringEnv(&cfg.JWTSecret, "LOGI_JWT_SECRET")
+	if !hasNonEmptyEnv("LOGI_SERVER_ADDRESS") {
+		applyPortEnv(&cfg.ServerAddress, "PORT")
+	}
+	applyStringEnvWithFallback(&cfg.MongoURI, "LOGI_MONGO_URI", "MONGODB_URI", "MONGO_URI")
+	applyStringEnvWithFallback(&cfg.JWTSecret, "LOGI_JWT_SECRET", "JWT_SECRET")
 	applyIntEnv(&cfg.JWTExpirationHours, "LOGI_JWT_EXPIRATION_HOURS")
-	applyStringEnv(&cfg.MessagingType, "LOGI_MESSAGING_TYPE")
-	applyStringEnv(&cfg.NATSURL, "LOGI_NATS_URL")
-	applyStringEnv(&cfg.DistanceCalculatorType, "LOGI_DISTANCE_CALCULATOR_TYPE")
-	applyStringEnv(&cfg.GoogleMapsAPIKey, "LOGI_GOOGLE_MAPS_API_KEY")
-	applyCSVEnv(&cfg.AllowedOrigins, "LOGI_ALLOWED_ORIGINS")
+	applyStringEnvWithFallback(&cfg.MessagingType, "LOGI_MESSAGING_TYPE")
+	applyStringEnvWithFallback(&cfg.NATSURL, "LOGI_NATS_URL", "NATS_URL")
+	applyStringEnvWithFallback(&cfg.DistanceCalculatorType, "LOGI_DISTANCE_CALCULATOR_TYPE")
+	applyStringEnvWithFallback(&cfg.GoogleMapsAPIKey, "LOGI_GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_API_KEY")
+	applyCSVEnvWithFallback(&cfg.AllowedOrigins, "LOGI_ALLOWED_ORIGINS", "ALLOWED_ORIGINS")
 	applyBoolEnv(&cfg.EnableTestRoutes, "LOGI_ENABLE_TEST_ROUTES")
 	applyIntEnv(&cfg.DBOperationTimeoutSeconds, "LOGI_DB_OPERATION_TIMEOUT_SECONDS")
 	applyIntEnv(&cfg.HTTPReadTimeoutSeconds, "LOGI_HTTP_READ_TIMEOUT_SECONDS")
@@ -98,10 +101,16 @@ func overrideFromEnv(cfg *Config) {
 
 func validateConfig(cfg *Config) error {
 	if strings.TrimSpace(cfg.MongoURI) == "" {
-		return fmt.Errorf("mongo_uri is required (or set LOGI_MONGO_URI)")
+		return fmt.Errorf("mongo_uri is required (set LOGI_MONGO_URI, MONGODB_URI, or MONGO_URI)")
+	}
+	if isCloudRuntime() && isLocalMongoURI(cfg.MongoURI) {
+		return fmt.Errorf("mongo_uri points to localhost in cloud runtime; set LOGI_MONGO_URI or MONGODB_URI to your external MongoDB connection string")
 	}
 	if len(strings.TrimSpace(cfg.JWTSecret)) < 32 {
 		return fmt.Errorf("jwt_secret must be at least 32 characters for production safety")
+	}
+	if (cfg.Environment == "production" || isCloudRuntime()) && isPlaceholderSecret(cfg.JWTSecret) {
+		return fmt.Errorf("jwt_secret placeholder detected; set LOGI_JWT_SECRET or JWT_SECRET to a strong random value")
 	}
 
 	switch cfg.MessagingType {
@@ -136,6 +145,15 @@ func applyStringEnv(target *string, key string) {
 	}
 }
 
+func applyStringEnvWithFallback(target *string, keys ...string) {
+	for _, key := range keys {
+		if val := strings.TrimSpace(os.Getenv(key)); val != "" {
+			*target = val
+			return
+		}
+	}
+}
+
 func applyIntEnv(target *int, key string) {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
@@ -163,6 +181,19 @@ func applyCSVEnv(target *[]string, key string) {
 	if raw == "" {
 		return
 	}
+	applyCSVValue(target, raw)
+}
+
+func applyCSVEnvWithFallback(target *[]string, keys ...string) {
+	for _, key := range keys {
+		if raw := strings.TrimSpace(os.Getenv(key)); raw != "" {
+			applyCSVValue(target, raw)
+			return
+		}
+	}
+}
+
+func applyCSVValue(target *[]string, raw string) {
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -172,4 +203,33 @@ func applyCSVEnv(target *[]string, key string) {
 		}
 	}
 	*target = out
+}
+
+func applyPortEnv(target *string, key string) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return
+	}
+	if strings.Contains(raw, ":") {
+		*target = raw
+		return
+	}
+	*target = ":" + raw
+}
+
+func hasNonEmptyEnv(key string) bool {
+	return strings.TrimSpace(os.Getenv(key)) != ""
+}
+
+func isCloudRuntime() bool {
+	return hasNonEmptyEnv("PORT")
+}
+
+func isLocalMongoURI(uri string) bool {
+	lower := strings.ToLower(strings.TrimSpace(uri))
+	return strings.Contains(lower, "localhost") || strings.Contains(lower, "127.0.0.1") || strings.Contains(lower, "[::1]")
+}
+
+func isPlaceholderSecret(secret string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(secret)), "replace-with-a-strong-secret")
 }

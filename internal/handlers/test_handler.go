@@ -23,7 +23,7 @@ func NewTestHandler(messagingClient messaging.MessagingClient) *TestHandler {
 // PublishTestMessages publishes different types of test messages
 func (h *TestHandler) PublishTestMessages(c *gin.Context) {
 	userID := c.GetString("userID")
-	utils.Logger.Println("userid", userID)
+	utils.Info(c.Request.Context(), "publishing test messages", "user_id", userID)
 
 	// Example: Publish a status update message
 	statusUpdate := map[string]interface{}{

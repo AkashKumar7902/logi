@@ -36,7 +36,7 @@ func NewVehicleRepository(dbClient *mongo.Client) VehicleRepository {
 	}
 	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
 	if err != nil {
-		utils.Logger.Printf("Failed to create vehicle indexes: %v", err)
+		utils.ErrorBackground("failed to create vehicle indexes", "error", err)
 	}
 	return &vehicleRepository{collection}
 }

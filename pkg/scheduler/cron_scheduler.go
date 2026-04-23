@@ -2,8 +2,8 @@ package scheduler
 
 import (
 	"context"
-	"log"
 	"logi/internal/services"
+	"logi/internal/utils"
 
 	"github.com/robfig/cron/v3"
 )
@@ -11,13 +11,14 @@ import (
 func StartScheduler(bookingService *services.BookingService) *cron.Cron {
 	c := cron.New()
 	_, err := c.AddFunc("@every 1m", func() {
-		log.Println("Checking for scheduled bookings...")
-		if runErr := bookingService.ActivateScheduledBookings(context.Background()); runErr != nil {
-			log.Println("Error activating scheduled bookings:", runErr)
+		jobCtx := context.Background()
+		utils.Info(jobCtx, "checking scheduled bookings", "component", "scheduler")
+		if runErr := bookingService.ActivateScheduledBookings(jobCtx); runErr != nil {
+			utils.Error(jobCtx, "failed to activate scheduled bookings", "component", "scheduler", "error", runErr)
 		}
 	})
 	if err != nil {
-		log.Println("Failed to register scheduler job:", err)
+		utils.ErrorBackground("failed to register scheduler job", "component", "scheduler", "error", err)
 	}
 	c.Start()
 	return c

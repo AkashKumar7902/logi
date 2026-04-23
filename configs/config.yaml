@@ -1,3 +1,4 @@
+# Local development defaults only. Override these with environment variables in cloud deploys.
 environment: "development"
 server_address: ":8080"
 mongo_uri: "mongodb://localhost:27017/logi"

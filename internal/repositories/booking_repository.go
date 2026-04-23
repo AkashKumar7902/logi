@@ -58,7 +58,7 @@ func NewBookingRepository(dbClient *mongo.Client) BookingRepository {
 	}
 	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
 	if err != nil {
-		utils.Logger.Printf("Failed to create booking indexes: %v", err)
+		utils.ErrorBackground("failed to create booking indexes", "error", err)
 	}
 	return &bookingRepository{collection}
 }
@@ -67,7 +67,6 @@ func (r *bookingRepository) Create(ctx context.Context, booking *models.Booking)
 	opCtx, cancel := utils.DBContext(ctx)
 	defer cancel()
 
-	utils.Logger.Println("creating booking")
 	_, err := r.collection.InsertOne(opCtx, booking)
 	return err
 }

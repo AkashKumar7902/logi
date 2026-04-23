@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,8 +25,9 @@ import (
 func main() {
 	config, err := utils.LoadConfig("configs/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		utils.Fatal("failed to load config", "error", err)
 	}
+	utils.ConfigureLogger(config.Environment)
 
 	if config.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -37,7 +37,7 @@ func main() {
 
 	dbClient, err := utils.ConnectDB(config.MongoURI)
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		utils.Fatal("failed to connect to mongodb", "error", err)
 	}
 	defer utils.DisconnectDB(dbClient)
 
@@ -50,7 +50,7 @@ func main() {
 	if config.MessagingType == "nats" {
 		natsClient, err := messaging.NewNATSClient(config.NATSURL)
 		if err != nil {
-			log.Fatalf("Failed to connect to NATS: %v", err)
+			utils.Fatal("failed to connect to nats", "error", err)
 		}
 		defer natsClient.Conn.Close()
 		messagingClient = natsClient
@@ -98,16 +98,16 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Server listening on %s", config.ServerAddress)
+		utils.InfoBackground("server listening", "address", config.ServerAddress)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			utils.Fatal("failed to start server", "error", err)
 		}
 	}()
 
 	shutdownSignals := make(chan os.Signal, 1)
 	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
 	<-shutdownSignals
-	log.Println("Shutdown signal received")
+	utils.InfoBackground("shutdown signal received")
 
 	cronCtx := bookingScheduler.Stop()
 	<-cronCtx.Done()
@@ -115,8 +115,8 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(config.ShutdownTimeoutSeconds)*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		utils.ErrorBackground("server shutdown error", "error", err)
 	}
 
-	log.Println("Server stopped gracefully")
+	utils.InfoBackground("server stopped gracefully")
 }

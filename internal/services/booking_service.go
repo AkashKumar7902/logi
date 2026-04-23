@@ -32,7 +32,7 @@ func (s *BookingService) CreateBooking(ctx context.Context, userID string, booki
 	// Calculate price with surge pricing
 	price, err := s.PricingService.CalculatePrice(ctx, bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
 	if err != nil {
-		utils.Logger.Println("failed to calculate price")
+		utils.Error(ctx, "failed to calculate price", "user_id", userID, "vehicle_type", bookingReq.VehicleType, "error", err)
 		return nil, errors.New("failed to calculate price")
 	}
 
@@ -84,7 +84,7 @@ func (s *BookingService) assignBookingToDrivers(ctx context.Context, booking *mo
 	)
 
 	if err != nil || len(drivers) == 0 {
-		utils.Logger.Println("no available drivers")
+		utils.Warn(ctx, "no available drivers", "booking_id", booking.ID, "vehicle_type", booking.VehicleType, "error", err)
 		return errors.New("no available drivers")
 	}
 
@@ -96,20 +96,20 @@ func (s *BookingService) assignBookingToDrivers(ctx context.Context, booking *mo
 			}
 		}
 
-		// Notify each driver
-		utils.Logger.Println("sending booking request to driver", driver.ID)
 		err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
 		if err != nil {
-			utils.Logger.Println("failed to send booking request to driver", driver.ID, err)
+			utils.Warn(ctx, "failed to send booking request to driver", "booking_id", booking.ID, "driver_id", driver.ID, "error", err)
 			continue
 		}
 		publishedCount++
 	}
 
 	if publishedCount == 0 {
+		utils.Warn(ctx, "booking request had no eligible recipients", "booking_id", booking.ID)
 		return errors.New("no eligible drivers available")
 	}
 
+	utils.Info(ctx, "booking request dispatched", "booking_id", booking.ID, "recipient_count", publishedCount)
 	return nil
 }
 
@@ -124,14 +124,14 @@ func (s *BookingService) ActivateScheduledBookings(ctx context.Context) error {
 		booking.DriverResponseStatus = "Pending"
 		err := s.Repo.Update(ctx, booking)
 		if err != nil {
-			utils.Logger.Printf("Failed to update booking status for booking ID %s: %v", booking.ID, err)
+			utils.Error(ctx, "failed to update scheduled booking status", "booking_id", booking.ID, "error", err)
 			continue
 		}
 
 		// Assign booking to nearby drivers
 		err = s.AssignBookingToDrivers(ctx, booking)
 		if err != nil {
-			utils.Logger.Printf("Failed to assign booking ID %s to drivers: %v", booking.ID, err)
+			utils.Error(ctx, "failed to assign scheduled booking to drivers", "booking_id", booking.ID, "error", err)
 			// Optionally, you might want to retry or mark the booking as failed
 			continue
 		}
@@ -178,7 +178,7 @@ func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, boo
 	err = s.DriverRepo.IncrementAcceptedBookings(ctx, driverID)
 	if err != nil {
 		// Log the error but do not fail the operation
-		utils.Logger.Printf("Failed to increment accepted bookings for driver %s: %v", driverID, err)
+		utils.Warn(ctx, "failed to increment accepted bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
 	}
 
 	err = s.DriverRepo.UpdateStatus(ctx, driverID, "Busy")
@@ -193,7 +193,7 @@ func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, boo
 	})
 	if publishErr != nil {
 		// Log the error but do not fail the operation
-		utils.Logger.Printf("Failed to publish driver status update: %v", publishErr)
+		utils.Warn(ctx, "failed to publish driver status update", "driver_id", driverID, "error", publishErr)
 	}
 
 	// Notify user that a driver has accepted the booking

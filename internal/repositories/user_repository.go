@@ -28,7 +28,7 @@ func NewUserRepository(dbClient *mongo.Client) UserRepository {
 		Options: options.Index().SetUnique(true).SetName("users_email_unique"),
 	})
 	if err != nil {
-		utils.Logger.Printf("Failed to create users email index: %v", err)
+		utils.ErrorBackground("failed to create users email index", "error", err)
 	}
 	return &userRepository{collection}
 }
