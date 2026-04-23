@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"logi/internal/messaging"
 	"logi/internal/models"
@@ -33,8 +34,8 @@ func NewDriverService(repo repositories.DriverRepository, bookingRepo repositori
 	}
 }
 
-func (s *DriverService) Register(driver *models.Driver, password string) error {
-	existingDriver, _ := s.Repo.FindByEmail(driver.Email)
+func (s *DriverService) Register(ctx context.Context, driver *models.Driver, password string) error {
+	existingDriver, _ := s.Repo.FindByEmail(ctx, driver.Email)
 	if existingDriver != nil {
 		return errors.New("driver already exists")
 	}
@@ -52,11 +53,11 @@ func (s *DriverService) Register(driver *models.Driver, password string) error {
 	driver.TotalBookingsCount = 0
 	driver.CompletedBookingsCount = 0
 
-	return s.Repo.Create(driver)
+	return s.Repo.Create(ctx, driver)
 }
 
-func (s *DriverService) Login(email, password string) (*models.Driver, error) {
-	driver, err := s.Repo.FindByEmail(email)
+func (s *DriverService) Login(ctx context.Context, email, password string) (*models.Driver, error) {
+	driver, err := s.Repo.FindByEmail(ctx, email)
 	if err != nil {
 		return nil, errors.New("invalid email or password")
 	}
@@ -69,9 +70,9 @@ func (s *DriverService) Login(email, password string) (*models.Driver, error) {
 }
 
 // UpdateStatus updates the driver's status and notifies admins
-func (s *DriverService) UpdateStatus(driverID, status string) error {
+func (s *DriverService) UpdateStatus(ctx context.Context, driverID, status string) error {
 	// Update the driver's status in the repository
-	err := s.Repo.UpdateStatus(driverID, status)
+	err := s.Repo.UpdateStatus(ctx, driverID, status)
 	if err != nil {
 		return err
 	}
@@ -90,9 +91,9 @@ func (s *DriverService) UpdateStatus(driverID, status string) error {
 }
 
 // UpdateBookingStatus updates the status of a booking
-func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, status string) error {
+func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string, bookingID string, status string) error {
 	// Find the booking by ID
-	booking, err := s.BookingRepo.FindByID(bookingID)
+	booking, err := s.BookingRepo.FindByID(ctx, bookingID)
 	if err != nil {
 		return err
 	}
@@ -125,19 +126,13 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 		}
 	case "Completed":
 		if booking.CompletedAt == nil {
-			s.Repo.IncrementCompletedBookings(driverID)
+			s.Repo.IncrementCompletedBookings(ctx, driverID)
 			booking.CompletedAt = &currentTime
 		}
 	}
 
-	err = s.BookingRepo.Update(booking)
-	if err != nil {
-		return err
-	}
-
-	// Update the booking status
 	booking.Status = status
-	err = s.BookingRepo.Update(booking)
+	err = s.BookingRepo.Update(ctx, booking)
 	if err != nil {
 		return err
 	}
@@ -150,7 +145,12 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 
 	// If booking is marked as completed, update driver's status to Available
 	if status == "Completed" {
-		err = s.UpdateStatus(booking.DriverID, "Available")
+		clearCurrentBookingErr := s.Repo.UpdateCurrentBookingID(ctx, driverID, "")
+		if clearCurrentBookingErr != nil {
+			utils.Logger.Printf("Failed to clear current booking for driver %s: %v", driverID, clearCurrentBookingErr)
+		}
+
+		err = s.UpdateStatus(ctx, booking.DriverID, "Available")
 		if err != nil {
 			return errors.New("failed to update driver status to Available")
 		}
@@ -159,19 +159,19 @@ func (s *DriverService) UpdateBookingStatus(driverID string, bookingID string, s
 	return nil
 }
 
-func (s *DriverService) UpdateLocation(driverID string, latitude, longitude float64) error {
+func (s *DriverService) UpdateLocation(ctx context.Context, driverID string, latitude, longitude float64) error {
 	location := models.Location{
 		Type:        "Point",
 		Coordinates: []float64{longitude, latitude},
 	}
 
-	err := s.Repo.UpdateLocation(driverID, location)
+	err := s.Repo.UpdateLocation(ctx, driverID, location)
 	if err != nil {
 		return err
 	}
 
 	// Find current booking for the driver
-	booking, err := s.BookingRepo.FindActiveBookingByDriverID(driverID)
+	booking, err := s.BookingRepo.FindActiveBookingByDriverID(ctx, driverID)
 	if err != nil {
 		return nil // No active booking, no need to notify
 	}
@@ -186,48 +186,48 @@ func (s *DriverService) UpdateLocation(driverID string, latitude, longitude floa
 	return nil
 }
 
-func (s *DriverService) GetAllDrivers() ([]*models.Driver, error) {
-	return s.Repo.GetAllDrivers()
+func (s *DriverService) GetAllDrivers(ctx context.Context) ([]*models.Driver, error) {
+	return s.Repo.GetAllDrivers(ctx)
 }
 
-func (s *DriverService) GetDriverByID(driverID string) (*models.Driver, error) {
-	return s.Repo.FindByID(driverID)
+func (s *DriverService) GetDriverByID(ctx context.Context, driverID string) (*models.Driver, error) {
+	return s.Repo.FindByID(ctx, driverID)
 }
 
-func (s *DriverService) UpdateDriver(driver *models.Driver) error {
-	return s.Repo.UpdateDriver(driver)
+func (s *DriverService) UpdateDriver(ctx context.Context, driver *models.Driver) error {
+	return s.Repo.UpdateDriver(ctx, driver)
 }
 
-func (s *DriverService) GetPendingBookings(driverID string) ([]*models.Booking, error) {
-	return s.BookingRepo.FindAssignedBookings(driverID)
+func (s *DriverService) GetPendingBookings(ctx context.Context, driverID string) ([]*models.Booking, error) {
+	return s.BookingRepo.FindAssignedBookings(ctx, driverID)
 }
 
-func (s *DriverService) RespondToBooking(driverID, bookingID, response string) error {
-	err := s.Repo.IncrementTotalBookings(driverID)
+func (s *DriverService) RespondToBooking(ctx context.Context, driverID, bookingID, response string) error {
+	err := s.Repo.IncrementTotalBookings(ctx, driverID)
 	if err != nil {
 		// Log the error but do not fail the operation
 		utils.Logger.Printf("Failed to increment total bookings for driver %s: %v", driverID, err)
 	}
 	if response == "accept" {
-		return s.BookingService.DriverAcceptsBooking(driverID, bookingID)
+		return s.BookingService.DriverAcceptsBooking(ctx, driverID, bookingID)
 	} else if response == "reject" {
-		return s.BookingService.DriverRejectsBooking(driverID, bookingID)
+		return s.BookingService.DriverRejectsBooking(ctx, driverID, bookingID)
 	}
 	return errors.New("invalid response")
 }
 
-func (s *DriverService) GetActiveBookings(driverID string) ([]*models.Booking, error) {
+func (s *DriverService) GetActiveBookings(ctx context.Context, driverID string) ([]*models.Booking, error) {
 	// Fetch bookings assigned to the driver that are not 'Completed' or 'Pending'
-	bookings, err := s.BookingRepo.GetActiveBookingsByDriverID(driverID)
+	bookings, err := s.BookingRepo.GetActiveBookingsByDriverID(ctx, driverID)
 	if err != nil {
 		return nil, err
 	}
 	return bookings, nil
 }
 
-func (s *DriverService) GetUserForBooking(driverID, bookingID string) (*models.User, error) {
+func (s *DriverService) GetUserForBooking(ctx context.Context, driverID, bookingID string) (*models.User, error) {
 	// Fetch the booking
-	booking, err := s.BookingRepo.FindByID(bookingID)
+	booking, err := s.BookingRepo.FindByID(ctx, bookingID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,23 +238,23 @@ func (s *DriverService) GetUserForBooking(driverID, bookingID string) (*models.U
 	}
 
 	// Fetch the user who made the booking
-	user, err := s.UserRepo.FindByID(booking.UserID)
+	user, err := s.UserRepo.FindByID(ctx, booking.UserID)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
-func (s *DriverService) GetDriverInfo(driverID string) (*models.Driver, error) {
-	driver, err := s.Repo.FindByID(driverID)
+func (s *DriverService) GetDriverInfo(ctx context.Context, driverID string) (*models.Driver, error) {
+	driver, err := s.Repo.FindByID(ctx, driverID)
 	if err != nil {
 		return nil, err
 	}
 	return driver, nil
 }
 
-func (s *DriverService) GetBooking(driverID, bookingID string) (*models.Booking, error) {
-	booking, err := s.BookingRepo.FindByIDAndDriverID(bookingID, driverID)
+func (s *DriverService) GetBooking(ctx context.Context, driverID, bookingID string) (*models.Booking, error) {
+	booking, err := s.BookingRepo.FindByIDAndDriverID(ctx, bookingID, driverID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("booking not found or not assigned to the driver")

@@ -7,23 +7,24 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type DriverRepository interface {
-	Create(driver *models.Driver) error
-	FindByEmail(email string) (*models.Driver, error)
-	FindAvailableDrivers(location models.Location, vehicleType string) ([]*models.Driver, error)
-	UpdateStatus(driverID string, status string) error
-	GetAvailableDriversCount() (int64, error)
-	GetAllDrivers() ([]*models.Driver, error)
-	FindByID(driverID string) (*models.Driver, error)
-	UpdateDriver(driver *models.Driver) error
-	UpdateLocation(driverID string, location models.Location) error
-    UpdateCurrentBookingID(driverID, bookingID string) error
-	IncrementAcceptedBookings(driverID string) error
-    IncrementTotalBookings(driverID string) error
-	IncrementCompletedBookings(driverID string) error
-	GetTotalDrivers() (int64, error)
+	Create(ctx context.Context, driver *models.Driver) error
+	FindByEmail(ctx context.Context, email string) (*models.Driver, error)
+	FindAvailableDrivers(ctx context.Context, location models.Location, vehicleType string) ([]*models.Driver, error)
+	UpdateStatus(ctx context.Context, driverID string, status string) error
+	GetAvailableDriversCount(ctx context.Context) (int64, error)
+	GetAllDrivers(ctx context.Context) ([]*models.Driver, error)
+	FindByID(ctx context.Context, driverID string) (*models.Driver, error)
+	UpdateDriver(ctx context.Context, driver *models.Driver) error
+	UpdateLocation(ctx context.Context, driverID string, location models.Location) error
+	UpdateCurrentBookingID(ctx context.Context, driverID, bookingID string) error
+	IncrementAcceptedBookings(ctx context.Context, driverID string) error
+	IncrementTotalBookings(ctx context.Context, driverID string) error
+	IncrementCompletedBookings(ctx context.Context, driverID string) error
+	GetTotalDrivers(ctx context.Context) (int64, error)
 }
 
 type driverRepository struct {
@@ -33,98 +34,126 @@ type driverRepository struct {
 func NewDriverRepository(dbClient *mongo.Client) DriverRepository {
 	collection := dbClient.Database("logi").Collection("drivers")
 
-	// Create geospatial index on location
-	indexModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "location", Value: "2dsphere"},
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "location", Value: "2dsphere"}},
+		},
+		{
+			Keys:    bson.D{{Key: "email", Value: 1}},
+			Options: options.Index().SetUnique(true).SetName("drivers_email_unique"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "status", Value: 1},
+				{Key: "vehicle_type", Value: 1},
+			},
+			Options: options.Index().SetName("drivers_status_vehicle_type"),
 		},
 	}
-	_, err := collection.Indexes().CreateOne(context.Background(), indexModel)
+	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
 	if err != nil {
-		utils.Logger.Fatalf("Failed to create geospatial index: %v", err)
+		utils.Logger.Printf("Failed to create driver indexes: %v", err)
 	}
 
 	return &driverRepository{collection}
 }
 
-func (r *driverRepository) Create(driver *models.Driver) error {
+func (r *driverRepository) Create(ctx context.Context, driver *models.Driver) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	if driver.Location.Type == "" || driver.Location.Coordinates == nil {
 		driver.Location = models.Location{
 			Type:        "Point",
 			Coordinates: []float64{0, 0}, // Default to valid values.
 		}
-	}	
+	}
 	if driver.VehicleType == "" {
 		driver.VehicleType = "car"
 	}
-	_, err := r.collection.InsertOne(context.Background(), driver)
+	_, err := r.collection.InsertOne(opCtx, driver)
 	utils.Logger.Println(err)
 	return err
 }
 
-func (r *driverRepository) FindByEmail(email string) (*models.Driver, error) {
+func (r *driverRepository) FindByEmail(ctx context.Context, email string) (*models.Driver, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	var driver models.Driver
-	err := r.collection.FindOne(context.Background(), bson.M{"email": email}).Decode(&driver)
+	err := r.collection.FindOne(opCtx, bson.M{"email": email}).Decode(&driver)
 	if err != nil {
 		return nil, err
 	}
 	return &driver, nil
 }
 
-func (r *driverRepository) FindAvailableDrivers(location models.Location, vehicleType string) ([]*models.Driver, error) {
+func (r *driverRepository) FindAvailableDrivers(ctx context.Context, location models.Location, vehicleType string) ([]*models.Driver, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	utils.Logger.Println(location)
-	
+
 	filter := bson.M{
-        "status":        "Available",
-        "vehicle_type":  vehicleType,
-        "location": bson.M{
-            "$near": bson.M{
-                "$geometry":    location,
-                "$maxDistance": 10000000, // Adjust as needed (in meters)
-            },
-        },
-    }
+		"status":       "Available",
+		"vehicle_type": vehicleType,
+		"location": bson.M{
+			"$near": bson.M{
+				"$geometry":    location,
+				"$maxDistance": 10000000, // Adjust as needed (in meters)
+			},
+		},
+	}
 
-    cursor, err := r.collection.Find(context.Background(), filter)
-    if err != nil {
-        return nil, err
-    }
-    defer cursor.Close(context.Background())
+	cursor, err := r.collection.Find(opCtx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(opCtx)
 
-    var drivers []*models.Driver
-    for cursor.Next(context.Background()) {
-        var driver models.Driver
-        if err := cursor.Decode(&driver); err != nil {
-            continue
-        }
-        drivers = append(drivers, &driver)
-    }
-    return drivers, nil
+	var drivers []*models.Driver
+	for cursor.Next(opCtx) {
+		var driver models.Driver
+		if err := cursor.Decode(&driver); err != nil {
+			continue
+		}
+		drivers = append(drivers, &driver)
+	}
+	return drivers, nil
 }
 
-func (r *driverRepository) UpdateStatus(driverID string, status string) error {
+func (r *driverRepository) UpdateStatus(ctx context.Context, driverID string, status string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	_, err := r.collection.UpdateOne(
-		context.Background(),
+		opCtx,
 		bson.M{"_id": driverID},
 		bson.M{"$set": bson.M{"status": status}},
 	)
 	return err
 }
 
-func (r *driverRepository) GetAvailableDriversCount() (int64, error) {
-	count, err := r.collection.CountDocuments(context.Background(), bson.M{"status": "Available"})
+func (r *driverRepository) GetAvailableDriversCount(ctx context.Context) (int64, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(opCtx, bson.M{"status": "Available"})
 	return count, err
 }
 
-func (r *driverRepository) GetAllDrivers() ([]*models.Driver, error) {
-	cursor, err := r.collection.Find(context.Background(), bson.M{})
+func (r *driverRepository) GetAllDrivers(ctx context.Context) ([]*models.Driver, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	cursor, err := r.collection.Find(opCtx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(context.Background())
+	defer cursor.Close(opCtx)
 
 	var drivers []*models.Driver
-	for cursor.Next(context.Background()) {
+	for cursor.Next(opCtx) {
 		var driver models.Driver
 		if err := cursor.Decode(&driver); err != nil {
 			continue
@@ -135,27 +164,36 @@ func (r *driverRepository) GetAllDrivers() ([]*models.Driver, error) {
 	return drivers, nil
 }
 
-func (r *driverRepository) FindByID(driverID string) (*models.Driver, error) {
+func (r *driverRepository) FindByID(ctx context.Context, driverID string) (*models.Driver, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	var driver models.Driver
-	err := r.collection.FindOne(context.Background(), bson.M{"_id": driverID}).Decode(&driver)
+	err := r.collection.FindOne(opCtx, bson.M{"_id": driverID}).Decode(&driver)
 	if err != nil {
 		return nil, err
 	}
 	return &driver, nil
 }
 
-func (r *driverRepository) UpdateDriver(driver *models.Driver) error {
+func (r *driverRepository) UpdateDriver(ctx context.Context, driver *models.Driver) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	_, err := r.collection.UpdateOne(
-		context.Background(),
+		opCtx,
 		bson.M{"_id": driver.ID},
 		bson.M{"$set": driver},
 	)
 	return err
 }
 
-func (r *driverRepository) UpdateLocation(driverID string, location models.Location) error {
+func (r *driverRepository) UpdateLocation(ctx context.Context, driverID string, location models.Location) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
 	_, err := r.collection.UpdateOne(
-		context.Background(),
+		opCtx,
 		bson.M{"_id": driverID},
 		bson.M{"$set": bson.M{
 			"location": location,
@@ -164,47 +202,62 @@ func (r *driverRepository) UpdateLocation(driverID string, location models.Locat
 	return err
 }
 
-func (r *driverRepository) UpdateCurrentBookingID(driverID, bookingID string) error {
-    _, err := r.collection.UpdateOne(
-        context.Background(),
-        bson.M{"_id": driverID},
-        bson.M{"$set": bson.M{"current_booking_id": bookingID}},
-    )
-    return err
+func (r *driverRepository) UpdateCurrentBookingID(ctx context.Context, driverID, bookingID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		opCtx,
+		bson.M{"_id": driverID},
+		bson.M{"$set": bson.M{"current_booking_id": bookingID}},
+	)
+	return err
 }
 
-func (r *driverRepository) IncrementAcceptedBookings(driverID string) error {
-    update := bson.M{
-        "$inc": bson.M{
-            "accepted_bookings_count": 1,
-        },
-    }
-    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
-    return err
+func (r *driverRepository) IncrementAcceptedBookings(ctx context.Context, driverID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	update := bson.M{
+		"$inc": bson.M{
+			"accepted_bookings_count": 1,
+		},
+	}
+	_, err := r.collection.UpdateOne(opCtx, bson.M{"_id": driverID}, update)
+	return err
 }
 
-func (r *driverRepository) IncrementTotalBookings(driverID string) error {
-    update := bson.M{
-        "$inc": bson.M{
-            "total_bookings_count": 1,
-        },
-    }
-    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
-    return err
+func (r *driverRepository) IncrementTotalBookings(ctx context.Context, driverID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	update := bson.M{
+		"$inc": bson.M{
+			"total_bookings_count": 1,
+		},
+	}
+	_, err := r.collection.UpdateOne(opCtx, bson.M{"_id": driverID}, update)
+	return err
 }
 
-func (r *driverRepository) IncrementCompletedBookings(driverID string) error {
-    update := bson.M{
-        "$inc": bson.M{
-            "completed_bookings_count": 1,
-        },
-    }
-    _, err := r.collection.UpdateOne(context.Background(), bson.M{"_id": driverID}, update)
-    return err
+func (r *driverRepository) IncrementCompletedBookings(ctx context.Context, driverID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	update := bson.M{
+		"$inc": bson.M{
+			"completed_bookings_count": 1,
+		},
+	}
+	_, err := r.collection.UpdateOne(opCtx, bson.M{"_id": driverID}, update)
+	return err
 }
 
 // GetTotalDrivers returns the total number of drivers.
-func (r *driverRepository) GetTotalDrivers() (int64, error) {
-    count, err := r.collection.CountDocuments(context.Background(), bson.M{})
-    return count, err
+func (r *driverRepository) GetTotalDrivers(ctx context.Context) (int64, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(opCtx, bson.M{})
+	return count, err
 }

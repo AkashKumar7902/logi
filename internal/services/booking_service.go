@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"logi/internal/messaging"
 	"logi/internal/models"
@@ -12,162 +13,175 @@ import (
 )
 
 type BookingService struct {
-    Repo           repositories.BookingRepository
-    DriverRepo     repositories.DriverRepository
-    PricingService *PricingService
-    MessagingClient messaging.MessagingClient
+	Repo            repositories.BookingRepository
+	DriverRepo      repositories.DriverRepository
+	PricingService  *PricingService
+	MessagingClient messaging.MessagingClient
 }
 
 func NewBookingService(repo repositories.BookingRepository, driverRepo repositories.DriverRepository, pricingService *PricingService, messagingClient messaging.MessagingClient) *BookingService {
-    return &BookingService{
-        Repo:           repo,
-        DriverRepo:     driverRepo,
-        PricingService: pricingService,
-        MessagingClient: messagingClient,
-    }
+	return &BookingService{
+		Repo:            repo,
+		DriverRepo:      driverRepo,
+		PricingService:  pricingService,
+		MessagingClient: messagingClient,
+	}
 }
 
-func (s *BookingService) CreateBooking(userID string, bookingReq *models.BookingRequest) (*models.Booking, error) {
-    // Calculate price with surge pricing
-    price, err := s.PricingService.CalculatePrice(bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
-    if err != nil {
-        utils.Logger.Println("failed to calculate price")
-        return nil, errors.New("failed to calculate price")
-    }
+func (s *BookingService) CreateBooking(ctx context.Context, userID string, bookingReq *models.BookingRequest) (*models.Booking, error) {
+	// Calculate price with surge pricing
+	price, err := s.PricingService.CalculatePrice(ctx, bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
+	if err != nil {
+		utils.Logger.Println("failed to calculate price")
+		return nil, errors.New("failed to calculate price")
+	}
 
-    booking := &models.Booking{
-        ID:                uuid.NewString(),
-        UserID:            userID,
-        PickupLocation:    bookingReq.PickupLocation,
-        DropoffLocation:   bookingReq.DropoffLocation,
-        VehicleType:       bookingReq.VehicleType,
-        PriceEstimate:     price,
-        Status:            "Pending",
-        DriverResponseStatus: "Pending",
-        CreatedAt:         time.Now(),
-    }
+	booking := &models.Booking{
+		ID:                   uuid.NewString(),
+		UserID:               userID,
+		PickupLocation:       bookingReq.PickupLocation,
+		DropoffLocation:      bookingReq.DropoffLocation,
+		VehicleType:          bookingReq.VehicleType,
+		PriceEstimate:        price,
+		Status:               "Pending",
+		DriverResponseStatus: "Pending",
+		CreatedAt:            time.Now(),
+	}
 
-    if bookingReq.ScheduledTime != nil {
-        booking.ScheduledTime = bookingReq.ScheduledTime
-    }
+	if bookingReq.ScheduledTime != nil {
+		booking.ScheduledTime = bookingReq.ScheduledTime
+	}
 
-    // Save booking to the database
-    err = s.Repo.Create(booking)
-    if err != nil {
-        return nil, err
-    }
+	// Save booking to the database
+	err = s.Repo.Create(ctx, booking)
+	if err != nil {
+		return nil, err
+	}
 
-    if booking.ScheduledTime != nil {
-        return booking, nil
-    }
+	if booking.ScheduledTime != nil {
+		return booking, nil
+	}
 
-    // Assign booking to drivers
-    err = s.AssignBookingToDrivers(booking)
-    if err != nil {
-        return nil, err
-    }
+	// Assign booking to drivers
+	err = s.AssignBookingToDrivers(ctx, booking)
+	if err != nil {
+		return nil, err
+	}
 
-    return booking, nil
+	return booking, nil
 }
 
 // AssignBookingToDrivers sends booking requests to nearby drivers
-func (s *BookingService) AssignBookingToDrivers(booking *models.Booking) error {
-    drivers, err := s.DriverRepo.FindAvailableDrivers(
-        booking.PickupLocation,
-        booking.VehicleType,
-    )
-
-    if err != nil || len(drivers) == 0 {
-        utils.Logger.Println("no available drivers")
-        return errors.New("no available drivers")
-    }
-
-    for _, driver := range drivers {
-        // Notify each driver
-        utils.Logger.Println("sending booking request to driver", driver.ID)
-        err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
-        if err != nil {
-            utils.Logger.Println("failed to send booking request to driver", driver.ID, err)
-            continue
-        }
-    }
-    return nil
+func (s *BookingService) AssignBookingToDrivers(ctx context.Context, booking *models.Booking) error {
+	return s.assignBookingToDrivers(ctx, booking, nil)
 }
 
-func (s *BookingService) ActivateScheduledBookings() error {
-    bookings, err := s.Repo.FindPendingScheduledBookings()
-    if err != nil {
-        return err
-    }
+func (s *BookingService) assignBookingToDrivers(ctx context.Context, booking *models.Booking, excludedDriverIDs map[string]struct{}) error {
+	drivers, err := s.DriverRepo.FindAvailableDrivers(
+		ctx,
+		booking.PickupLocation,
+		booking.VehicleType,
+	)
 
-    for _, booking := range bookings {
-        // Update booking status to indicate it's now active and awaiting driver response
-        booking.DriverResponseStatus = "Pending"
-        err := s.Repo.Update(booking)
-        if err != nil {
-            utils.Logger.Printf("Failed to update booking status for booking ID %s: %v", booking.ID, err)
-            continue
-        }
+	if err != nil || len(drivers) == 0 {
+		utils.Logger.Println("no available drivers")
+		return errors.New("no available drivers")
+	}
 
-        // Assign booking to nearby drivers
-        err = s.AssignBookingToDrivers(booking)
-        if err != nil {
-            utils.Logger.Printf("Failed to assign booking ID %s to drivers: %v", booking.ID, err)
-            // Optionally, you might want to retry or mark the booking as failed
-            continue
-        }
-    }
+	publishedCount := 0
+	for _, driver := range drivers {
+		if excludedDriverIDs != nil {
+			if _, excluded := excludedDriverIDs[driver.ID]; excluded {
+				continue
+			}
+		}
 
-    return nil
+		// Notify each driver
+		utils.Logger.Println("sending booking request to driver", driver.ID)
+		err := s.MessagingClient.Publish(driver.ID, "new_booking_request", booking)
+		if err != nil {
+			utils.Logger.Println("failed to send booking request to driver", driver.ID, err)
+			continue
+		}
+		publishedCount++
+	}
+
+	if publishedCount == 0 {
+		return errors.New("no eligible drivers available")
+	}
+
+	return nil
 }
 
+func (s *BookingService) ActivateScheduledBookings(ctx context.Context) error {
+	bookings, err := s.Repo.FindPendingScheduledBookings(ctx)
+	if err != nil {
+		return err
+	}
 
-func (s *BookingService) GetPriceEstimate(bookingReq *models.PriceEstimateRequest) (float64, error) {
-    price, err := s.PricingService.CalculatePrice(
-        bookingReq.PickupLocation,
-        bookingReq.DropoffLocation,
-        bookingReq.VehicleType,
-    )
-    if err != nil {
-        return 0, err
-    }
-    return price, nil
+	for _, booking := range bookings {
+		// Update booking status to indicate it's now active and awaiting driver response
+		booking.DriverResponseStatus = "Pending"
+		err := s.Repo.Update(ctx, booking)
+		if err != nil {
+			utils.Logger.Printf("Failed to update booking status for booking ID %s: %v", booking.ID, err)
+			continue
+		}
+
+		// Assign booking to nearby drivers
+		err = s.AssignBookingToDrivers(ctx, booking)
+		if err != nil {
+			utils.Logger.Printf("Failed to assign booking ID %s to drivers: %v", booking.ID, err)
+			// Optionally, you might want to retry or mark the booking as failed
+			continue
+		}
+	}
+
+	return nil
+}
+
+func (s *BookingService) GetPriceEstimate(ctx context.Context, bookingReq *models.PriceEstimateRequest) (float64, error) {
+	price, err := s.PricingService.CalculatePrice(
+		ctx,
+		bookingReq.PickupLocation,
+		bookingReq.DropoffLocation,
+		bookingReq.VehicleType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return price, nil
 }
 
 // DriverAcceptsBooking handles driver's acceptance
-func (s *BookingService) DriverAcceptsBooking(driverID, bookingID string) error {
-    booking, err := s.Repo.FindByID(bookingID)
-    if err != nil {
-        return err
-    }
+func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, bookingID string) error {
+	assigned, err := s.Repo.AssignDriverIfUnassigned(ctx, bookingID, driverID)
+	if err != nil {
+		return err
+	}
+	if !assigned {
+		return errors.New("booking already accepted or unavailable")
+	}
 
-    if booking.DriverResponseStatus != "Pending" {
-        return errors.New("booking already accepted or rejected")
-    }
+	booking, err := s.Repo.FindByID(ctx, bookingID)
+	if err != nil {
+		return err
+	}
 
-    // Update booking with driver ID and status
-    booking.DriverID = driverID
-    booking.Status = "Driver Assigned"
-    booking.DriverResponseStatus = "Accepted"
-    err = s.Repo.Update(booking)
-    if err != nil {
-        return err
-    }
+	// Update driver's current booking
+	err = s.DriverRepo.UpdateCurrentBookingID(ctx, driverID, bookingID)
+	if err != nil {
+		return err
+	}
 
-    // Update driver's current booking
-    err = s.DriverRepo.UpdateCurrentBookingID(driverID, bookingID)
-    if err != nil {
-        return err
-    }
+	// Increment driver's counts
+	err = s.DriverRepo.IncrementAcceptedBookings(ctx, driverID)
+	if err != nil {
+		// Log the error but do not fail the operation
+		utils.Logger.Printf("Failed to increment accepted bookings for driver %s: %v", driverID, err)
+	}
 
-    // Increment driver's counts
-    err = s.DriverRepo.IncrementAcceptedBookings(driverID)
-    if err != nil {
-        // Log the error but do not fail the operation
-        utils.Logger.Printf("Failed to increment accepted bookings for driver %s: %v", driverID, err)
-    }
-
-    err = s.DriverRepo.UpdateStatus(driverID, "Busy")
+	err = s.DriverRepo.UpdateStatus(ctx, driverID, "Busy")
 	if err != nil {
 		return err
 	}
@@ -182,41 +196,34 @@ func (s *BookingService) DriverAcceptsBooking(driverID, bookingID string) error 
 		utils.Logger.Printf("Failed to publish driver status update: %v", publishErr)
 	}
 
-    // Notify user that a driver has accepted the booking
-    err = s.MessagingClient.Publish(booking.UserID, "booking_accepted", map[string]interface{}{
-        "booking_id": booking.ID,
-        "driver_id":  driverID,
-    })
-    if err != nil {
-        // Handle messaging errors
-    }
+	// Notify user that a driver has accepted the booking
+	err = s.MessagingClient.Publish(booking.UserID, "booking_accepted", map[string]interface{}{
+		"booking_id": booking.ID,
+		"driver_id":  driverID,
+	})
+	if err != nil {
+		// Handle messaging errors
+	}
 
-    return nil
+	return nil
 }
 
 // DriverRejectsBooking handles driver's rejection
-func (s *BookingService) DriverRejectsBooking(driverID, bookingID string) error {
-    booking, err := s.Repo.FindByID(bookingID)
-    if err != nil {
-        return err
-    }
+func (s *BookingService) DriverRejectsBooking(ctx context.Context, driverID, bookingID string) error {
+	booking, err := s.Repo.FindByID(ctx, bookingID)
+	if err != nil {
+		return err
+	}
 
-    if booking.DriverResponseStatus != "Pending" {
-        return errors.New("booking already accepted or rejected")
-    }
+	if booking.DriverID != "" || booking.Status != "Pending" {
+		return errors.New("booking already accepted or unavailable")
+	}
 
-    // Update booking status
-    booking.DriverResponseStatus = "Rejected"
-    err = s.Repo.Update(booking)
-    if err != nil {
-        return err
-    }
+	// Reassign booking to other eligible drivers, excluding rejecting driver.
+	err = s.assignBookingToDrivers(ctx, booking, map[string]struct{}{driverID: {}})
+	if err != nil {
+		return err
+	}
 
-    // Optionally, reassign the booking to other drivers
-    err = s.AssignBookingToDrivers(booking)
-    if err != nil {
-        return err
-    }
-
-    return nil
+	return nil
 }

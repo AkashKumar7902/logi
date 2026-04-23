@@ -1,24 +1,40 @@
 package api
 
 import (
+	"net/http"
+	"time"
+
 	"logi/internal/handlers"
 	"logi/internal/utils"
 	"logi/pkg/auth"
 	"logi/pkg/websocket"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
-func Default() gin.HandlerFunc {
+func corsMiddleware(cfg *utils.Config) gin.HandlerFunc {
 	config := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}
-	config.AllowAllOrigins = true
+
+	allowAll := false
+	for _, origin := range cfg.AllowedOrigins {
+		if origin == "*" {
+			allowAll = true
+			break
+		}
+	}
+
+	if allowAll {
+		config.AllowAllOrigins = true
+	} else {
+		config.AllowOrigins = cfg.AllowedOrigins
+	}
+
 	return cors.New(config)
 }
 
@@ -30,9 +46,20 @@ func SetupRouter(
 	authService *auth.AuthService,
 	wsHub *websocket.WebSocketHub,
 	testHandler *handlers.TestHandler,
+	cfg *utils.Config,
 ) *gin.Engine {
-	router := gin.Default()
-	router.Use(Default())
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
+	router.Use(corsMiddleware(cfg))
+
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	router.GET("/readyz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+	})
 
 	// Public routes
 	router.POST("/users/register", userHandler.Register)
@@ -43,10 +70,12 @@ func SetupRouter(
 	router.POST("/admins/login", adminHandler.Login)
 
 	router.GET("/ws", func(c *gin.Context) {
-		handlers.ServeWs(authService, wsHub, c)
+		handlers.ServeWs(authService, wsHub, cfg.AllowedOriginsSet(), c)
 	})
-	
-	router.GET("/test", testHandler.PublishTestMessages)
+
+	if cfg.EnableTestRoutes {
+		router.GET("/test", utils.JWTAuthMiddleware(authService, "admin"), testHandler.PublishTestMessages)
+	}
 
 	// Protected routes with JWT middleware
 	userProtected := router.Group("/", utils.JWTAuthMiddleware(authService, "user"))
@@ -84,7 +113,6 @@ func SetupRouter(
 		adminProtected.GET("/vehicles/:vehicleID", adminHandler.GetVehicle)
 		adminProtected.PUT("/vehicles/:vehicleID", adminHandler.UpdateVehicle)
 		adminProtected.DELETE("/vehicles/:vehicleID", adminHandler.DeleteVehicle)
-
 	}
 
 	return router

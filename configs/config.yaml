@@ -1,7 +1,29 @@
+environment: "development"
 server_address: ":8080"
-mongo_uri: "mongodb+srv://Akash:meakash7902@cluster0.sjlpojg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-jwt_secret: "hey"
+mongo_uri: "mongodb://localhost:27017/logi"
+jwt_secret: "replace-with-a-strong-secret-at-least-32-characters"
+jwt_expiration_hours: 72
 
 # Messaging configuration
-messaging_type: "websocket" # or "nats"
-nats_url: "nats://localhost:4222" # Required if messaging_type is "nats"
+messaging_type: "websocket" # websocket or nats
+nats_url: "nats://localhost:4222"
+
+# Distance calculator: haversine or google_maps
+distance_calculator_type: "haversine"
+google_maps_api_key: ""
+
+# Comma-separated in env: LOGI_ALLOWED_ORIGINS
+allowed_origins:
+  - "http://localhost:3000"
+
+# Operational toggles
+enable_test_routes: false
+
+# Database operation timeout per query/update
+db_operation_timeout_seconds: 5
+
+# HTTP timeouts
+http_read_timeout_seconds: 15
+http_write_timeout_seconds: 30
+http_idle_timeout_seconds: 60
+shutdown_timeout_seconds: 15

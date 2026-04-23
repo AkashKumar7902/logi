@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"logi/internal/models"
 	"logi/internal/repositories"
@@ -22,13 +23,13 @@ func NewUserService(repo repositories.UserRepository, bookingRepo repositories.B
 	return &UserService{
 		Repo:        repo,
 		BookingRepo: bookingRepo,
-        DriverRepo: driverRepo,
+		DriverRepo:  driverRepo,
 		AuthService: authService,
 	}
 }
 
-func (s *UserService) Register(user *models.User, password string) error {
-	existingUser, _ := s.Repo.FindByEmail(user.Email)
+func (s *UserService) Register(ctx context.Context, user *models.User, password string) error {
+	existingUser, _ := s.Repo.FindByEmail(ctx, user.Email)
 	if existingUser != nil {
 		return errors.New("user already exists")
 	}
@@ -43,11 +44,11 @@ func (s *UserService) Register(user *models.User, password string) error {
 	user.CreatedAt = time.Now()
 	user.Role = "user" // Add this line
 
-	return s.Repo.Create(user)
+	return s.Repo.Create(ctx, user)
 }
 
-func (s *UserService) Login(email, password string) (*models.User, error) {
-	user, err := s.Repo.FindByEmail(email)
+func (s *UserService) Login(ctx context.Context, email, password string) (*models.User, error) {
+	user, err := s.Repo.FindByEmail(ctx, email)
 	if err != nil {
 		return nil, errors.New("invalid email or password")
 	}
@@ -59,18 +60,18 @@ func (s *UserService) Login(email, password string) (*models.User, error) {
 	return user, nil
 }
 
-func (s *UserService) GetActiveBooking(userID string) (*models.Booking, error) {
+func (s *UserService) GetActiveBooking(ctx context.Context, userID string) (*models.Booking, error) {
 	// Fetch bookings that are not 'Completed' or 'Pending'
-	booking, err := s.BookingRepo.GetActiveBookingByUserID(userID)
+	booking, err := s.BookingRepo.GetActiveBookingByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	return booking, nil
 }
 
-func (s *UserService) GetDriverForBooking(userID, bookingID string) (*models.Driver, error) {
+func (s *UserService) GetDriverForBooking(ctx context.Context, userID, bookingID string) (*models.Driver, error) {
 	// Fetch the booking
-	booking, err := s.BookingRepo.FindByID(bookingID)
+	booking, err := s.BookingRepo.FindByID(ctx, bookingID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func (s *UserService) GetDriverForBooking(userID, bookingID string) (*models.Dri
 
 	utils.Logger.Println(booking.DriverID)
 	// Fetch the driver assigned to the booking
-	driver, err := s.DriverRepo.FindByID(booking.DriverID)
+	driver, err := s.DriverRepo.FindByID(ctx, booking.DriverID)
 	if err != nil {
 		return nil, err
 	}

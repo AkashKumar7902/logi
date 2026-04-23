@@ -22,6 +22,8 @@ func NewDriverHandler(service *services.DriverService, authService *auth.AuthSer
 }
 
 func (h *DriverHandler) Register(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var payload struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
@@ -38,7 +40,7 @@ func (h *DriverHandler) Register(c *gin.Context) {
 		Email: payload.Email,
 	}
 
-	err := h.Service.Register(driver, payload.Password)
+	err := h.Service.Register(ctx, driver, payload.Password)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -48,6 +50,8 @@ func (h *DriverHandler) Register(c *gin.Context) {
 }
 
 func (h *DriverHandler) Login(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var payload struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -58,7 +62,7 @@ func (h *DriverHandler) Login(c *gin.Context) {
 		return
 	}
 
-	driver, err := h.Service.Login(payload.Email, payload.Password)
+	driver, err := h.Service.Login(ctx, payload.Email, payload.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -74,6 +78,8 @@ func (h *DriverHandler) Login(c *gin.Context) {
 }
 
 func (h *DriverHandler) UpdateStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var payload struct {
 		Status string `json:"status"`
 	}
@@ -89,7 +95,7 @@ func (h *DriverHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	err := h.Service.UpdateStatus(driverID.(string), payload.Status)
+	err := h.Service.UpdateStatus(ctx, driverID.(string), payload.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -100,6 +106,8 @@ func (h *DriverHandler) UpdateStatus(c *gin.Context) {
 
 // UpdateStatus allows drivers to update their booking status (e.g., En Route, Goods Collected, etc.)
 func (h *DriverHandler) UpdateBookingStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var req struct {
 		BookingID string `json:"booking_id"`
 		Status    string `json:"status"`
@@ -117,7 +125,7 @@ func (h *DriverHandler) UpdateBookingStatus(c *gin.Context) {
 	}
 
 	// Update the booking status through the service layer
-	err := h.Service.UpdateBookingStatus(driverID.(string), req.BookingID, req.Status)
+	err := h.Service.UpdateBookingStatus(ctx, driverID.(string), req.BookingID, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -127,6 +135,8 @@ func (h *DriverHandler) UpdateBookingStatus(c *gin.Context) {
 }
 
 func (h *DriverHandler) UpdateLocation(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var payload struct {
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
@@ -143,7 +153,7 @@ func (h *DriverHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
-	err := h.Service.UpdateLocation(driverID.(string), payload.Latitude, payload.Longitude)
+	err := h.Service.UpdateLocation(ctx, driverID.(string), payload.Latitude, payload.Longitude)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -153,13 +163,14 @@ func (h *DriverHandler) UpdateLocation(c *gin.Context) {
 }
 
 func (h *DriverHandler) GetPendingBookings(c *gin.Context) {
+	ctx := c.Request.Context()
 	driverID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	bookings, err := h.Service.GetPendingBookings(driverID.(string))
+	bookings, err := h.Service.GetPendingBookings(ctx, driverID.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -169,6 +180,8 @@ func (h *DriverHandler) GetPendingBookings(c *gin.Context) {
 }
 
 func (h *DriverHandler) RespondToBooking(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var payload struct {
 		BookingID string `json:"booking_id"`
 		Response  string `json:"response"` // "accept" or "reject"
@@ -185,7 +198,7 @@ func (h *DriverHandler) RespondToBooking(c *gin.Context) {
 		return
 	}
 
-	err := h.Service.RespondToBooking(driverID.(string), payload.BookingID, payload.Response)
+	err := h.Service.RespondToBooking(ctx, driverID.(string), payload.BookingID, payload.Response)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -195,9 +208,10 @@ func (h *DriverHandler) RespondToBooking(c *gin.Context) {
 }
 
 func (h *DriverHandler) GetActiveBookings(c *gin.Context) {
+	ctx := c.Request.Context()
 	driverID := c.GetString("userID")
 
-	bookings, err := h.Service.GetActiveBookings(driverID)
+	bookings, err := h.Service.GetActiveBookings(ctx, driverID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No active bookings found"})
 		return
@@ -206,10 +220,11 @@ func (h *DriverHandler) GetActiveBookings(c *gin.Context) {
 }
 
 func (h *DriverHandler) GetUserForBooking(c *gin.Context) {
+	ctx := c.Request.Context()
 	driverID := c.GetString("userID")
 	bookingID := c.Param("bookingID")
 
-	user, err := h.Service.GetUserForBooking(driverID, bookingID)
+	user, err := h.Service.GetUserForBooking(ctx, driverID, bookingID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
@@ -218,9 +233,10 @@ func (h *DriverHandler) GetUserForBooking(c *gin.Context) {
 }
 
 func (h *DriverHandler) GetDriverInfo(c *gin.Context) {
+	ctx := c.Request.Context()
 	driverID := c.GetString("userID")
 
-	driver, err := h.Service.GetDriverInfo(driverID)
+	driver, err := h.Service.GetDriverInfo(ctx, driverID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve driver info"})
 		return
@@ -230,6 +246,7 @@ func (h *DriverHandler) GetDriverInfo(c *gin.Context) {
 
 // GetBooking retrieves a specific booking by ID for the authenticated driver.
 func (h *DriverHandler) GetBooking(c *gin.Context) {
+	ctx := c.Request.Context()
 	bookingID := c.Param("bookingID")
 	if bookingID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Booking ID is required"})
@@ -242,7 +259,7 @@ func (h *DriverHandler) GetBooking(c *gin.Context) {
 		return
 	}
 
-	booking, err := h.Service.GetBooking(driverID.(string), bookingID)
+	booking, err := h.Service.GetBooking(ctx, driverID.(string), bookingID)
 	if err != nil {
 		if err.Error() == "booking not found or not assigned to the driver" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

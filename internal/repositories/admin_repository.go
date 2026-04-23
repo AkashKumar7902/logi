@@ -1,37 +1,52 @@
 package repositories
 
 import (
-    "context"
-    "logi/internal/models"
+	"context"
+	"logi/internal/models"
+	"logi/internal/utils"
 
-    "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type AdminRepository interface {
-    Create(admin *models.Admin) error
-    FindByEmail(email string) (*models.Admin, error)
+	Create(ctx context.Context, admin *models.Admin) error
+	FindByEmail(ctx context.Context, email string) (*models.Admin, error)
 }
 
 type adminRepository struct {
-    collection *mongo.Collection
+	collection *mongo.Collection
 }
 
 func NewAdminRepository(dbClient *mongo.Client) AdminRepository {
-    collection := dbClient.Database("logi").Collection("admins")
-    return &adminRepository{collection}
+	collection := dbClient.Database("logi").Collection("admins")
+	_, err := collection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys:    bson.D{{Key: "email", Value: 1}},
+		Options: options.Index().SetUnique(true).SetName("admins_email_unique"),
+	})
+	if err != nil {
+		utils.Logger.Printf("Failed to create admin email index: %v", err)
+	}
+	return &adminRepository{collection}
 }
 
-func (r *adminRepository) Create(admin *models.Admin) error {
-    _, err := r.collection.InsertOne(context.Background(), admin)
-    return err
+func (r *adminRepository) Create(ctx context.Context, admin *models.Admin) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	_, err := r.collection.InsertOne(opCtx, admin)
+	return err
 }
 
-func (r *adminRepository) FindByEmail(email string) (*models.Admin, error) {
-    var admin models.Admin
-    err := r.collection.FindOne(context.Background(), bson.M{"email": email}).Decode(&admin)
-    if err != nil {
-        return nil, err
-    }
-    return &admin, nil
+func (r *adminRepository) FindByEmail(ctx context.Context, email string) (*models.Admin, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	var admin models.Admin
+	err := r.collection.FindOne(opCtx, bson.M{"email": email}).Decode(&admin)
+	if err != nil {
+		return nil, err
+	}
+	return &admin, nil
 }

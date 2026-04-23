@@ -1,64 +1,68 @@
 package handlers
 
 import (
-    "net/http"
-    "logi/internal/models"
-    "logi/internal/services"
+	"logi/internal/models"
+	"logi/internal/services"
+	"net/http"
 
-    "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 )
 
 type BookingHandler struct {
-    Service *services.BookingService
+	Service *services.BookingService
 }
 
 func NewBookingHandler(service *services.BookingService) *BookingHandler {
-    return &BookingHandler{Service: service}
+	return &BookingHandler{Service: service}
 }
 
 func (h *BookingHandler) CreateBooking(c *gin.Context) {
-    var bookingReq models.BookingRequest
-    if err := c.BindJSON(&bookingReq); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-        return
-    }
+	ctx := c.Request.Context()
 
-    userID, exists := c.Get("userID")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
+	var bookingReq models.BookingRequest
+	if err := c.BindJSON(&bookingReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
 
-    booking, err := h.Service.CreateBooking(userID.(string), &bookingReq)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    c.JSON(http.StatusCreated, booking)
+	booking, err := h.Service.CreateBooking(ctx, userID.(string), &bookingReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, booking)
 }
 
 func (h *BookingHandler) GetPriceEstimate(c *gin.Context) {
-    var estimateReq models.PriceEstimateRequest
+	ctx := c.Request.Context()
 
-    // Bind and validate the JSON input
-    if err := c.ShouldBindJSON(&estimateReq); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
-        return
-    }
+	var estimateReq models.PriceEstimateRequest
 
-    // Call the service to get the price estimate
-    estimatedPrice, err := h.Service.GetPriceEstimate(&estimateReq)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate price estimate"})
-        return
-    }
+	// Bind and validate the JSON input
+	if err := c.ShouldBindJSON(&estimateReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
 
-    // Prepare the response
-    response := models.PriceEstimateResponse{
-        EstimatedPrice: estimatedPrice,
-    }
+	// Call the service to get the price estimate
+	estimatedPrice, err := h.Service.GetPriceEstimate(ctx, &estimateReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate price estimate"})
+		return
+	}
 
-    // Return the estimated price
-    c.JSON(http.StatusOK, response)
+	// Prepare the response
+	response := models.PriceEstimateResponse{
+		EstimatedPrice: estimatedPrice,
+	}
+
+	// Return the estimated price
+	c.JSON(http.StatusOK, response)
 }

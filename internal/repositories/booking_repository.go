@@ -11,231 +11,334 @@ import (
 )
 
 type BookingRepository interface {
-    Create(booking *models.Booking) error
-    Update(booking *models.Booking) error
-    FindByID(id string) (*models.Booking, error)
-    FindActiveBookingByDriverID(driverID string) (*models.Booking, error)
-    FindPendingScheduledBookings() ([]*models.Booking, error)
-    GetActiveBookingsCount() (int64, error)
-    FindAssignedBookings(driverID string) ([]*models.Booking, error)
-    UpdateDriverResponseStatus(bookingID, status string) error
-    GetActiveBookingsByDriverID(driverID string) ([]*models.Booking, error)
-    GetActiveBookingByUserID(userID string) (*models.Booking, error)
-    FindByIDAndDriverID(id string, driverID string) (*models.Booking, error)
-    GetAverageTripTime() (float64, error)
-    GetTotalBookings() (int64, error)
+	Create(ctx context.Context, booking *models.Booking) error
+	Update(ctx context.Context, booking *models.Booking) error
+	FindByID(ctx context.Context, id string) (*models.Booking, error)
+	AssignDriverIfUnassigned(ctx context.Context, bookingID, driverID string) (bool, error)
+	FindActiveBookingByDriverID(ctx context.Context, driverID string) (*models.Booking, error)
+	FindPendingScheduledBookings(ctx context.Context) ([]*models.Booking, error)
+	GetActiveBookingsCount(ctx context.Context) (int64, error)
+	FindAssignedBookings(ctx context.Context, driverID string) ([]*models.Booking, error)
+	UpdateDriverResponseStatus(ctx context.Context, bookingID, status string) error
+	GetActiveBookingsByDriverID(ctx context.Context, driverID string) ([]*models.Booking, error)
+	GetActiveBookingByUserID(ctx context.Context, userID string) (*models.Booking, error)
+	FindByIDAndDriverID(ctx context.Context, id string, driverID string) (*models.Booking, error)
+	GetAverageTripTime(ctx context.Context) (float64, error)
+	GetTotalBookings(ctx context.Context) (int64, error)
 }
 
 type bookingRepository struct {
-    collection *mongo.Collection
+	collection *mongo.Collection
 }
 
 func NewBookingRepository(dbClient *mongo.Client) BookingRepository {
-    collection := dbClient.Database("logi").Collection("bookings")
-    return &bookingRepository{collection}
+	collection := dbClient.Database("logi").Collection("bookings")
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "status", Value: 1},
+				{Key: "scheduled_time", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "driver_id", Value: 1},
+				{Key: "status", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "status", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{{Key: "created_at", Value: -1}},
+		},
+	}
+	_, err := collection.Indexes().CreateMany(context.Background(), indexes)
+	if err != nil {
+		utils.Logger.Printf("Failed to create booking indexes: %v", err)
+	}
+	return &bookingRepository{collection}
 }
 
-func (r *bookingRepository) Create(booking *models.Booking) error {
-    utils.Logger.Println("creating booking")
-    _, err := r.collection.InsertOne(context.Background(), booking)
-    return err
+func (r *bookingRepository) Create(ctx context.Context, booking *models.Booking) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	utils.Logger.Println("creating booking")
+	_, err := r.collection.InsertOne(opCtx, booking)
+	return err
 }
 
-func (r *bookingRepository) Update(booking *models.Booking) error {
-    _, err := r.collection.UpdateOne(
-        context.Background(),
-        bson.M{"_id": booking.ID},
-        bson.M{"$set": booking},
-    )
-    return err
+func (r *bookingRepository) Update(ctx context.Context, booking *models.Booking) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		opCtx,
+		bson.M{"_id": booking.ID},
+		bson.M{"$set": booking},
+	)
+	return err
 }
 
-func (r *bookingRepository) FindByID(id string) (*models.Booking, error) {
-    var booking models.Booking
-    err := r.collection.FindOne(context.Background(), bson.M{"_id": id}).Decode(&booking)
-    if err != nil {
-        return nil, err
-    }
-    return &booking, nil
+func (r *bookingRepository) FindByID(ctx context.Context, id string) (*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	var booking models.Booking
+	err := r.collection.FindOne(opCtx, bson.M{"_id": id}).Decode(&booking)
+	if err != nil {
+		return nil, err
+	}
+	return &booking, nil
 }
 
-func (r *bookingRepository) FindActiveBookingByDriverID(driverID string) (*models.Booking, error) {
-    var booking models.Booking
-    filter := bson.M{
-        "driver_id": driverID,
-        "status": bson.M{
-            "$in": []string{
-                "Driver Assigned",
-                "En Route to Pickup",
-                "Goods Collected",
-                "In Transit",
-            },
-        },
-    }
-    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
-    if err != nil {
-        return nil, err
-    }
-    return &booking, nil
+func (r *bookingRepository) AssignDriverIfUnassigned(ctx context.Context, bookingID, driverID string) (bool, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	filter := bson.M{
+		"_id":       bookingID,
+		"driver_id": "",
+		"status":    "Pending",
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"driver_id":              driverID,
+			"status":                 "Driver Assigned",
+			"driver_response_status": "Accepted",
+		},
+	}
+	result, err := r.collection.UpdateOne(opCtx, filter, update)
+	if err != nil {
+		return false, err
+	}
+	return result.ModifiedCount == 1, nil
 }
 
-func (r *bookingRepository) FindPendingScheduledBookings() ([]*models.Booking, error) {
-    filter := bson.M{
-        "status":        "Pending",
-        "scheduled_time": bson.M{"$lte": time.Now()},
-    }
-    cursor, err := r.collection.Find(context.Background(), filter)
-    if err != nil {
-        return nil, err
-    }
-    defer cursor.Close(context.Background())
+func (r *bookingRepository) FindActiveBookingByDriverID(ctx context.Context, driverID string) (*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
 
-    var bookings []*models.Booking
-    for cursor.Next(context.Background()) {
-        var booking models.Booking
-        if err := cursor.Decode(&booking); err != nil {
-            continue
-        }
-        bookings = append(bookings, &booking)
-    }
-    return bookings, nil
+	var booking models.Booking
+	filter := bson.M{
+		"driver_id": driverID,
+		"status": bson.M{
+			"$in": []string{
+				"Driver Assigned",
+				"En Route to Pickup",
+				"Goods Collected",
+				"In Transit",
+			},
+		},
+	}
+	err := r.collection.FindOne(opCtx, filter).Decode(&booking)
+	if err != nil {
+		return nil, err
+	}
+	return &booking, nil
 }
 
-func (r *bookingRepository) GetActiveBookingsCount() (int64, error) {
-    count, err := r.collection.CountDocuments(
-        context.Background(),
-        bson.M{"status": bson.M{"$in": []string{"Pending", "Driver Assigned", "In Transit"}}},
-    )
-    return count, err
+func (r *bookingRepository) FindPendingScheduledBookings(ctx context.Context) ([]*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	filter := bson.M{
+		"status":         "Pending",
+		"scheduled_time": bson.M{"$lte": time.Now()},
+	}
+	cursor, err := r.collection.Find(opCtx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(opCtx)
+
+	var bookings []*models.Booking
+	for cursor.Next(opCtx) {
+		var booking models.Booking
+		if err := cursor.Decode(&booking); err != nil {
+			continue
+		}
+		bookings = append(bookings, &booking)
+	}
+	return bookings, nil
 }
 
-func (r *bookingRepository) UpdateDriverResponseStatus(bookingID, status string) error {
-    _, err := r.collection.UpdateOne(
-        context.Background(),
-        bson.M{"_id": bookingID},
-        bson.M{"$set": bson.M{"driver_response_status": status}},
-    )
-    return err
+func (r *bookingRepository) GetActiveBookingsCount(ctx context.Context) (int64, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(
+		opCtx,
+		bson.M{"status": bson.M{"$in": []string{"Pending", "Driver Assigned", "In Transit"}}},
+	)
+	return count, err
 }
 
-func (r *bookingRepository) FindAssignedBookings(driverID string) ([]*models.Booking, error) {
-    filter := bson.M{
-        "driver_id": driverID,
-        "driver_response_status": "Pending",
-    }
-    cursor, err := r.collection.Find(context.Background(), filter)
-    if err != nil {
-        return nil, err
-    }
-    defer cursor.Close(context.Background())
+func (r *bookingRepository) UpdateDriverResponseStatus(ctx context.Context, bookingID, status string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
 
-    var bookings []*models.Booking
-    for cursor.Next(context.Background()) {
-        var booking models.Booking
-        if err := cursor.Decode(&booking); err != nil {
-            continue
-        }
-        bookings = append(bookings, &booking)
-    }
-    return bookings, nil
+	_, err := r.collection.UpdateOne(
+		opCtx,
+		bson.M{"_id": bookingID},
+		bson.M{"$set": bson.M{"driver_response_status": status}},
+	)
+	return err
 }
 
-func (r *bookingRepository) GetActiveBookingByUserID(userID string) (*models.Booking, error) {
-    filter := bson.M{
-        "user_id": userID,
-        "status": bson.M{
-            "$nin": []string{"Completed", "Pending"},
-        },
-    }
-    var booking models.Booking
-    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
-    if err != nil {
-        return nil, err
-    }
-    return &booking, nil
+func (r *bookingRepository) FindAssignedBookings(ctx context.Context, driverID string) ([]*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	filter := bson.M{
+		"driver_id":              driverID,
+		"driver_response_status": "Pending",
+	}
+	cursor, err := r.collection.Find(opCtx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(opCtx)
+
+	var bookings []*models.Booking
+	for cursor.Next(opCtx) {
+		var booking models.Booking
+		if err := cursor.Decode(&booking); err != nil {
+			continue
+		}
+		bookings = append(bookings, &booking)
+	}
+	return bookings, nil
 }
 
-func (r *bookingRepository) GetActiveBookingsByDriverID(driverID string) ([]*models.Booking, error) {
-    filter := bson.M{
-        "driver_id": driverID,
-        "status": bson.M{
-            "$nin": []string{"Completed", "Pending"},
-        },
-    }
-    cursor, err := r.collection.Find(context.Background(), filter)
-    if err != nil {
-        return nil, err
-    }
-    defer cursor.Close(context.Background())
+func (r *bookingRepository) GetActiveBookingByUserID(ctx context.Context, userID string) (*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
 
-    var bookings []*models.Booking
-    for cursor.Next(context.Background()) {
-        var booking models.Booking
-        if err := cursor.Decode(&booking); err != nil {
-            continue
-        }
-        bookings = append(bookings, &booking)
-    }
-    return bookings, nil
+	filter := bson.M{
+		"user_id": userID,
+		"status": bson.M{
+			"$nin": []string{"Completed", "Pending"},
+		},
+	}
+	var booking models.Booking
+	err := r.collection.FindOne(opCtx, filter).Decode(&booking)
+	if err != nil {
+		return nil, err
+	}
+	return &booking, nil
 }
 
-func (r *bookingRepository) FindByIDAndDriverID(id string, driverID string) (*models.Booking, error) {
-    var booking models.Booking
-    filter := bson.M{
-        "_id":       id,
-        "driver_id": driverID,
-    }
-    err := r.collection.FindOne(context.Background(), filter).Decode(&booking)
-    if err != nil {
-        return nil, err
-    }
-    return &booking, nil
+func (r *bookingRepository) GetActiveBookingsByDriverID(ctx context.Context, driverID string) ([]*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	filter := bson.M{
+		"driver_id": driverID,
+		"status": bson.M{
+			"$nin": []string{"Completed", "Pending"},
+		},
+	}
+	cursor, err := r.collection.Find(opCtx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(opCtx)
+
+	var bookings []*models.Booking
+	for cursor.Next(opCtx) {
+		var booking models.Booking
+		if err := cursor.Decode(&booking); err != nil {
+			continue
+		}
+		bookings = append(bookings, &booking)
+	}
+	return bookings, nil
+}
+
+func (r *bookingRepository) FindByIDAndDriverID(ctx context.Context, id string, driverID string) (*models.Booking, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	var booking models.Booking
+	filter := bson.M{
+		"_id":       id,
+		"driver_id": driverID,
+	}
+	err := r.collection.FindOne(opCtx, filter).Decode(&booking)
+	if err != nil {
+		return nil, err
+	}
+	return &booking, nil
 }
 
 // GetAverageTripTime calculates the average trip time of completed bookings in minutes.
-func (r *bookingRepository) GetAverageTripTime() (float64, error) {
-    pipeline := mongo.Pipeline{
-        {{"$match", bson.D{
-            {"status", "Completed"},
-            {"started_at", bson.D{{"$exists", true}}},
-            {"completed_at", bson.D{{"$exists", true}}},
-        }}},
-        {{"$project", bson.D{
-            {"trip_time", bson.D{
-                {"$divide", bson.A{
-                    bson.D{{"$subtract", bson.A{"$completed_at", "$started_at"}}},
-                    1000 * 60, // Convert milliseconds to minutes
-                }},
-            }},
-        }}},
-        {{"$group", bson.D{
-            {"_id", nil},
-            {"average_trip_time", bson.D{{"$avg", "$trip_time"}}},
-        }}},
-    }
+func (r *bookingRepository) GetAverageTripTime(ctx context.Context) (float64, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
 
-    cursor, err := r.collection.Aggregate(context.Background(), pipeline)
-    if err != nil {
-        return 0, err
-    }
-    defer cursor.Close(context.Background())
+	pipeline := mongo.Pipeline{
+		{{
+			Key: "$match",
+			Value: bson.D{
+				{Key: "status", Value: "Completed"},
+				{Key: "started_at", Value: bson.D{{Key: "$exists", Value: true}}},
+				{Key: "completed_at", Value: bson.D{{Key: "$exists", Value: true}}},
+			},
+		}},
+		{{
+			Key: "$project",
+			Value: bson.D{
+				{
+					Key: "trip_time",
+					Value: bson.D{{
+						Key: "$divide",
+						Value: bson.A{
+							bson.D{{Key: "$subtract", Value: bson.A{"$completed_at", "$started_at"}}},
+							1000 * 60, // Convert milliseconds to minutes
+						},
+					}},
+				},
+			},
+		}},
+		{{
+			Key: "$group",
+			Value: bson.D{
+				{Key: "_id", Value: nil},
+				{Key: "average_trip_time", Value: bson.D{{Key: "$avg", Value: "$trip_time"}}},
+			},
+		}},
+	}
 
-    var result struct {
-        AverageTripTime float64 `bson:"average_trip_time"`
-    }
+	cursor, err := r.collection.Aggregate(opCtx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(opCtx)
 
-    if cursor.Next(context.Background()) {
-        if err := cursor.Decode(&result); err != nil {
-            return 0, err
-        }
-        return result.AverageTripTime, nil
-    }
+	var result struct {
+		AverageTripTime float64 `bson:"average_trip_time"`
+	}
 
-    return 0, nil // No completed bookings
+	if cursor.Next(opCtx) {
+		if err := cursor.Decode(&result); err != nil {
+			return 0, err
+		}
+		return result.AverageTripTime, nil
+	}
+
+	return 0, nil // No completed bookings
 }
 
 // GetTotalBookings returns the total number of bookings.
-func (r *bookingRepository) GetTotalBookings() (int64, error) {
-    count, err := r.collection.CountDocuments(context.Background(), bson.M{})
-    return count, err
+func (r *bookingRepository) GetTotalBookings(ctx context.Context) (int64, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(opCtx, bson.M{})
+	return count, err
 }

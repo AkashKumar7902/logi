@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"logi/internal/models"
 	"logi/internal/repositories"
 	"logi/internal/services/distance"
@@ -23,13 +24,13 @@ func NewPricingService(bookingRepo repositories.BookingRepository, driverRepo re
 }
 
 // CalculatePrice calculates the price based on pickup and dropoff locations and vehicle type.
-func (s *PricingService) CalculatePrice(pickup, dropoff models.Location, vehicleType string) (float64, error) {
+func (s *PricingService) CalculatePrice(ctx context.Context, pickup, dropoff models.Location, vehicleType string) (float64, error) {
 	basePrice, err := s.calculateBasePrice(pickup, dropoff, vehicleType)
 	if err != nil {
 		return 0, err
 	}
 
-	surgeMultiplier := s.calculateSurgeMultiplier()
+	surgeMultiplier := s.calculateSurgeMultiplier(ctx)
 
 	finalPrice := basePrice * surgeMultiplier
 	return math.Round(finalPrice*100) / 100, nil // Round to two decimal places
@@ -86,9 +87,9 @@ func (s *PricingService) getRatePerKm(vehicleType string) float64 {
 	}
 }
 
-func (s *PricingService) calculateSurgeMultiplier() float64 {
-	activeBookings, _ := s.BookingRepo.GetActiveBookingsCount()
-	availableDrivers, _ := s.DriverRepo.GetAvailableDriversCount()
+func (s *PricingService) calculateSurgeMultiplier(ctx context.Context) float64 {
+	activeBookings, _ := s.BookingRepo.GetActiveBookingsCount(ctx)
+	availableDrivers, _ := s.DriverRepo.GetAvailableDriversCount(ctx)
 
 	if availableDrivers == 0 {
 		return 2.0 // Max surge
