@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +14,7 @@ import (
 	"logi/pkg/websocket"
 )
 
-func newTestRouter(cfg *utils.Config) http.Handler {
+func newTestRouter(cfg *utils.Config, readinessChecks ...ReadinessCheck) http.Handler {
 	return SetupRouter(
 		&handlers.UserHandler{},
 		&handlers.BookingHandler{},
@@ -22,6 +24,7 @@ func newTestRouter(cfg *utils.Config) http.Handler {
 		websocket.NewWebSocketHub(),
 		&handlers.TestHandler{},
 		cfg,
+		readinessChecks...,
 	)
 }
 
@@ -38,6 +41,40 @@ func TestSetupRouterDoesNotExposePublicAdminRegistration(t *testing.T) {
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected /admins/register to be unavailable, got status %d", recorder.Code)
+	}
+}
+
+func TestReadyzReturnsOKWhenReadinessChecksPass(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(
+		&utils.Config{AllowedOrigins: []string{"http://localhost:3000"}},
+		func(ctx context.Context) error { return nil },
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected ready status 200, got %d", recorder.Code)
+	}
+}
+
+func TestReadyzReturnsUnavailableWhenReadinessCheckFails(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(
+		&utils.Config{AllowedOrigins: []string{"http://localhost:3000"}},
+		func(ctx context.Context) error { return errors.New("mongo unavailable") },
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected ready status 503, got %d", recorder.Code)
 	}
 }
 

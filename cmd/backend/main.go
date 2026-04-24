@@ -96,7 +96,12 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService, authService, userService, driverService, bookingService, vehicleService)
 	testHandler := handlers.NewTestHandler(messagingClient)
 
-	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService, wsHub, testHandler, config)
+	mongoReadinessCheck := func(ctx context.Context) error {
+		opCtx, cancel := context.WithTimeout(ctx, time.Duration(config.DBOperationTimeoutSeconds)*time.Second)
+		defer cancel()
+		return dbClient.Ping(opCtx, nil)
+	}
+	router := api.SetupRouter(userHandler, bookingHandler, driverHandler, adminHandler, authService, wsHub, testHandler, config, mongoReadinessCheck)
 
 	bookingScheduler := scheduler.StartScheduler(bookingService)
 

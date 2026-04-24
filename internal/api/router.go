@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
 	"strings"
@@ -16,6 +17,8 @@ import (
 )
 
 const adminBootstrapSecretHeader = "X-Admin-Bootstrap-Secret"
+
+type ReadinessCheck func(context.Context) error
 
 func corsMiddleware(cfg *utils.Config) gin.HandlerFunc {
 	config := cors.Config{
@@ -66,6 +69,7 @@ func SetupRouter(
 	wsHub *websocket.WebSocketHub,
 	testHandler *handlers.TestHandler,
 	cfg *utils.Config,
+	readinessChecks ...ReadinessCheck,
 ) *gin.Engine {
 	router := gin.New()
 	router.Use(utils.RequestIDMiddleware())
@@ -78,6 +82,16 @@ func SetupRouter(
 	})
 
 	router.GET("/readyz", func(c *gin.Context) {
+		for _, check := range readinessChecks {
+			if err := check(c.Request.Context()); err != nil {
+				utils.Warn(c.Request.Context(), "readiness check failed", "error", err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"status": "not_ready",
+					"error":  "dependency check failed",
+				})
+				return
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	})
 
