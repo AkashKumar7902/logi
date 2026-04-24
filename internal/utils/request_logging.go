@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := redactedRawQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 
@@ -83,6 +84,35 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 			Info(c.Request.Context(), "http request completed", attrs...)
 		}
 	}
+}
+
+func redactedRawQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return "[unparseable]"
+	}
+
+	for key := range values {
+		if isSensitiveQueryKey(key) {
+			values[key] = []string{"[REDACTED]"}
+		}
+	}
+	return values.Encode()
+}
+
+func isSensitiveQueryKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	return normalized == "token" ||
+		normalized == "access_token" ||
+		normalized == "id_token" ||
+		normalized == "refresh_token" ||
+		normalized == "password" ||
+		normalized == "secret" ||
+		strings.HasSuffix(normalized, "_secret")
 }
 
 func RecoveryMiddleware() gin.HandlerFunc {

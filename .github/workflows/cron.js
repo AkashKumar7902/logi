@@ -1,18 +1,25 @@
-// cron.js
 const https = require('https');
 
-const backendUrl = 'https://logi-y295.onrender.com';
+const backendUrl = process.env.LOGI_KEEP_ALIVE_URL || 'https://logi-y295.onrender.com/healthz';
+const timeoutMs = Number(process.env.LOGI_KEEP_ALIVE_TIMEOUT_MS || 10000);
 
-console.log('Attempting to keep server alive...');
+console.log(`Pinging backend health endpoint: ${backendUrl}`);
 
-https
+const request = https
   .get(backendUrl, (res) => {
-    if (res.statusCode === 200) {
-      console.log('Server is alive');
+    res.resume();
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      console.log(`Backend is healthy: ${res.statusCode}`);
     } else {
-      console.error(`Failed with status code: ${res.statusCode}`);
+      console.error(`Backend health check failed with status code: ${res.statusCode}`);
+      process.exitCode = 1;
     }
   })
   .on('error', (err) => {
-    console.error('Error occurred:', err.message);
+    console.error('Backend health check error:', err.message);
+    process.exitCode = 1;
   });
+
+request.setTimeout(timeoutMs, () => {
+  request.destroy(new Error(`Backend health check timed out after ${timeoutMs}ms`));
+});

@@ -20,8 +20,12 @@ func (h *BookingHandler) CreateBooking(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var bookingReq models.BookingRequest
-	if err := c.BindJSON(&bookingReq); err != nil {
+	if err := c.ShouldBindJSON(&bookingReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if err := models.ValidateBookingRequest(&bookingReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -48,6 +52,10 @@ func (h *BookingHandler) GetPriceEstimate(c *gin.Context) {
 	// Bind and validate the JSON input
 	if err := c.ShouldBindJSON(&estimateReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+	if err := models.ValidatePriceEstimateRequest(&estimateReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

@@ -29,6 +29,10 @@ func NewBookingService(repo repositories.BookingRepository, driverRepo repositor
 }
 
 func (s *BookingService) CreateBooking(ctx context.Context, userID string, bookingReq *models.BookingRequest) (*models.Booking, error) {
+	if err := models.ValidateBookingRequest(bookingReq); err != nil {
+		return nil, err
+	}
+
 	// Calculate price with surge pricing
 	price, err := s.PricingService.CalculatePrice(ctx, bookingReq.PickupLocation, bookingReq.DropoffLocation, bookingReq.VehicleType)
 	if err != nil {
@@ -138,22 +142,18 @@ func (s *BookingService) ActivateScheduledBookings(ctx context.Context) error {
 	}
 
 	for _, booking := range bookings {
-		// Update booking status to indicate it's now active and awaiting driver response
 		booking.DriverResponseStatus = "Pending"
-		booking.OfferedDriverIDs = nil
-		booking.RejectedDriverIDs = nil
-		err := s.Repo.Update(ctx, booking)
-		if err != nil {
-			utils.Error(ctx, "failed to update scheduled booking status", "booking_id", booking.ID, "error", err)
-			continue
-		}
 
-		// Assign booking to nearby drivers
 		err = s.AssignBookingToDrivers(ctx, booking)
 		if err != nil {
 			utils.Error(ctx, "failed to assign scheduled booking to drivers", "booking_id", booking.ID, "error", err)
-			// Optionally, you might want to retry or mark the booking as failed
 			continue
+		}
+
+		now := time.Now()
+		booking.ScheduledActivatedAt = &now
+		if err := s.Repo.Update(ctx, booking); err != nil {
+			utils.Error(ctx, "failed to mark scheduled booking activated", "booking_id", booking.ID, "error", err)
 		}
 	}
 
@@ -161,6 +161,10 @@ func (s *BookingService) ActivateScheduledBookings(ctx context.Context) error {
 }
 
 func (s *BookingService) GetPriceEstimate(ctx context.Context, bookingReq *models.PriceEstimateRequest) (float64, error) {
+	if err := models.ValidatePriceEstimateRequest(bookingReq); err != nil {
+		return 0, err
+	}
+
 	price, err := s.PricingService.CalculatePrice(
 		ctx,
 		bookingReq.PickupLocation,
@@ -175,23 +179,27 @@ func (s *BookingService) GetPriceEstimate(ctx context.Context, bookingReq *model
 
 // DriverAcceptsBooking handles driver's acceptance
 func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, bookingID string) error {
-	assigned, err := s.Repo.AssignDriverIfUnassigned(ctx, bookingID, driverID)
-	if err != nil {
-		return err
-	}
-	if !assigned {
-		return errors.New("booking already accepted or unavailable")
-	}
-
 	booking, err := s.Repo.FindByID(ctx, bookingID)
 	if err != nil {
 		return err
 	}
 
-	// Update driver's current booking
-	err = s.DriverRepo.UpdateCurrentBookingID(ctx, driverID, bookingID)
+	reserved, err := s.DriverRepo.TryAssignCurrentBooking(ctx, driverID, bookingID)
 	if err != nil {
 		return err
+	}
+	if !reserved {
+		return errors.New("driver is not available")
+	}
+
+	assigned, err := s.Repo.AssignDriverIfUnassigned(ctx, bookingID, driverID)
+	if err != nil {
+		s.rollbackDriverReservation(ctx, driverID, bookingID)
+		return err
+	}
+	if !assigned {
+		s.rollbackDriverReservation(ctx, driverID, bookingID)
+		return errors.New("booking already accepted or unavailable")
 	}
 
 	// Increment driver's counts
@@ -199,11 +207,6 @@ func (s *BookingService) DriverAcceptsBooking(ctx context.Context, driverID, boo
 	if err != nil {
 		// Log the error but do not fail the operation
 		utils.Warn(ctx, "failed to increment accepted bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
-	}
-
-	err = s.DriverRepo.UpdateStatus(ctx, driverID, models.DriverStatusBusy)
-	if err != nil {
-		return err
 	}
 
 	// Publish the status update to admins via MessagingClient
@@ -238,6 +241,9 @@ func (s *BookingService) DriverRejectsBooking(ctx context.Context, driverID, boo
 	if booking.DriverID != "" || booking.Status != models.BookingStatusPending {
 		return errors.New("booking already accepted or unavailable")
 	}
+	if !bookingWasOfferedToDriver(booking, driverID) {
+		return errors.New("booking was not offered to this driver")
+	}
 
 	alreadyRejected := false
 	for _, rejectedDriverID := range booking.RejectedDriverIDs {
@@ -257,4 +263,19 @@ func (s *BookingService) DriverRejectsBooking(ctx context.Context, driverID, boo
 	}
 
 	return nil
+}
+
+func (s *BookingService) rollbackDriverReservation(ctx context.Context, driverID, bookingID string) {
+	if err := s.DriverRepo.ClearCurrentBookingIfMatches(ctx, driverID, bookingID); err != nil {
+		utils.Warn(ctx, "failed to rollback driver reservation", "driver_id", driverID, "booking_id", bookingID, "error", err)
+	}
+}
+
+func bookingWasOfferedToDriver(booking *models.Booking, driverID string) bool {
+	for _, offeredDriverID := range booking.OfferedDriverIDs {
+		if offeredDriverID == driverID {
+			return true
+		}
+	}
+	return false
 }

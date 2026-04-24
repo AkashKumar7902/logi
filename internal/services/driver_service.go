@@ -71,6 +71,10 @@ func (s *DriverService) Login(ctx context.Context, email, password string) (*mod
 
 // UpdateStatus updates the driver's status and notifies admins
 func (s *DriverService) UpdateStatus(ctx context.Context, driverID, status string) error {
+	if err := models.ValidateDriverStatus(status); err != nil {
+		return err
+	}
+
 	// Update the driver's status in the repository
 	err := s.Repo.UpdateStatus(ctx, driverID, status)
 	if err != nil {
@@ -164,6 +168,10 @@ func (s *DriverService) UpdateBookingStatus(ctx context.Context, driverID string
 }
 
 func (s *DriverService) UpdateLocation(ctx context.Context, driverID string, latitude, longitude float64) error {
+	if err := models.ValidateLatitudeLongitude(latitude, longitude); err != nil {
+		return err
+	}
+
 	location := models.Location{
 		Type:        "Point",
 		Coordinates: []float64{longitude, latitude},
@@ -213,14 +221,20 @@ func (s *DriverService) RespondToBooking(ctx context.Context, driverID, bookingI
 		return errors.New("invalid response")
 	}
 
-	err := s.Repo.IncrementTotalBookings(ctx, driverID)
-	if err != nil {
-		utils.Warn(ctx, "failed to increment total bookings", "driver_id", driverID, "booking_id", bookingID, "error", err)
-	}
+	var err error
 	if response == "accept" {
-		return s.BookingService.DriverAcceptsBooking(ctx, driverID, bookingID)
+		err = s.BookingService.DriverAcceptsBooking(ctx, driverID, bookingID)
+	} else {
+		err = s.BookingService.DriverRejectsBooking(ctx, driverID, bookingID)
 	}
-	return s.BookingService.DriverRejectsBooking(ctx, driverID, bookingID)
+	if err != nil {
+		return err
+	}
+
+	if incrementErr := s.Repo.IncrementTotalBookings(ctx, driverID); incrementErr != nil {
+		utils.Warn(ctx, "failed to increment total bookings", "driver_id", driverID, "booking_id", bookingID, "error", incrementErr)
+	}
+	return nil
 }
 
 func (s *DriverService) GetActiveBookings(ctx context.Context, driverID string) ([]*models.Booking, error) {

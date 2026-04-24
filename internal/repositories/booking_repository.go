@@ -149,6 +149,10 @@ func (r *bookingRepository) FindPendingScheduledBookings(ctx context.Context) ([
 	filter := bson.M{
 		"status":         models.BookingStatusPending,
 		"scheduled_time": bson.M{"$lte": time.Now()},
+		"$or": bson.A{
+			bson.M{"scheduled_activated_at": bson.M{"$exists": false}},
+			bson.M{"scheduled_activated_at": nil},
+		},
 	}
 	cursor, err := r.collection.Find(opCtx, filter)
 	if err != nil {

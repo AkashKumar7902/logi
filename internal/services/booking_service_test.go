@@ -24,18 +24,11 @@ func TestBookingServiceDriverAcceptsBookingUpdatesStateAndPublishes(t *testing.T
 		},
 	}
 
-	var currentBookingDriverID string
-	var currentBookingID string
-	var busyDriverID string
-	var busyStatus string
+	var reservedDriverID string
+	var reservedBookingID string
 	acceptedCount := 0
 
 	driverRepo := &fakeDriverRepository{
-		updateCurrentBookingIDFn: func(ctx context.Context, driverID, bookingID string) error {
-			currentBookingDriverID = driverID
-			currentBookingID = bookingID
-			return nil
-		},
 		incrementAcceptedFn: func(ctx context.Context, driverID string) error {
 			if driverID != "driver-1" {
 				t.Fatalf("unexpected driver increment: %s", driverID)
@@ -43,10 +36,10 @@ func TestBookingServiceDriverAcceptsBookingUpdatesStateAndPublishes(t *testing.T
 			acceptedCount++
 			return nil
 		},
-		updateStatusFn: func(ctx context.Context, driverID, status string) error {
-			busyDriverID = driverID
-			busyStatus = status
-			return nil
+		tryAssignCurrentBookingFn: func(ctx context.Context, driverID, bookingID string) (bool, error) {
+			reservedDriverID = driverID
+			reservedBookingID = bookingID
+			return true, nil
 		},
 	}
 
@@ -57,14 +50,11 @@ func TestBookingServiceDriverAcceptsBookingUpdatesStateAndPublishes(t *testing.T
 		t.Fatalf("DriverAcceptsBooking returned error: %v", err)
 	}
 
-	if currentBookingDriverID != "driver-1" || currentBookingID != "booking-1" {
-		t.Fatalf("current booking was not assigned correctly: %s %s", currentBookingDriverID, currentBookingID)
+	if reservedDriverID != "driver-1" || reservedBookingID != "booking-1" {
+		t.Fatalf("driver reservation was not recorded correctly: %s %s", reservedDriverID, reservedBookingID)
 	}
 	if acceptedCount != 1 {
 		t.Fatalf("expected accepted count increment once, got %d", acceptedCount)
-	}
-	if busyDriverID != "driver-1" || busyStatus != "Busy" {
-		t.Fatalf("driver status not updated to busy: %s %s", busyDriverID, busyStatus)
 	}
 	if len(messaging.published) != 2 {
 		t.Fatalf("expected 2 published messages, got %d", len(messaging.published))
@@ -77,19 +67,31 @@ func TestBookingServiceDriverAcceptsBookingUpdatesStateAndPublishes(t *testing.T
 	}
 }
 
-func TestBookingServiceDriverAcceptsBookingReturnsErrorWhenUnavailable(t *testing.T) {
+func TestBookingServiceDriverAcceptsBookingRollsBackWhenBookingUnavailable(t *testing.T) {
 	t.Parallel()
 
-	driverRepoCalled := false
+	rollbackCalled := false
 	service := NewBookingService(
 		&fakeBookingRepository{
+			findByIDFn: func(ctx context.Context, id string) (*models.Booking, error) {
+				return &models.Booking{
+					ID:     id,
+					UserID: "user-1",
+				}, nil
+			},
 			assignDriverIfUnassignedFn: func(ctx context.Context, bookingID, driverID string) (bool, error) {
 				return false, nil
 			},
 		},
 		&fakeDriverRepository{
-			updateCurrentBookingIDFn: func(ctx context.Context, driverID, bookingID string) error {
-				driverRepoCalled = true
+			tryAssignCurrentBookingFn: func(ctx context.Context, driverID, bookingID string) (bool, error) {
+				return true, nil
+			},
+			clearCurrentBookingFn: func(ctx context.Context, driverID, bookingID string) error {
+				rollbackCalled = true
+				if driverID != "driver-1" || bookingID != "booking-1" {
+					t.Fatalf("unexpected rollback request: %s %s", driverID, bookingID)
+				}
 				return nil
 			},
 		},
@@ -101,8 +103,8 @@ func TestBookingServiceDriverAcceptsBookingReturnsErrorWhenUnavailable(t *testin
 	if err == nil {
 		t.Fatal("expected error when booking is unavailable")
 	}
-	if driverRepoCalled {
-		t.Fatal("driver repository should not be updated when assignment fails")
+	if !rollbackCalled {
+		t.Fatal("driver reservation should be rolled back when booking assignment fails")
 	}
 }
 
@@ -117,8 +119,9 @@ func TestBookingServiceDriverRejectsBookingSkipsRejectingDriver(t *testing.T) {
 					Type:        "Point",
 					Coordinates: []float64{72.8777, 19.0760},
 				},
-				VehicleType: "car",
-				Status:      "Pending",
+				VehicleType:      "car",
+				Status:           "Pending",
+				OfferedDriverIDs: []string{"driver-1", "driver-2"},
 			}, nil
 		},
 	}
@@ -157,8 +160,9 @@ func TestBookingServiceDriverRejectsBookingFailsWhenNoEligibleDriversRemain(t *t
 						Type:        "Point",
 						Coordinates: []float64{0, 0},
 					},
-					VehicleType: "car",
-					Status:      "Pending",
+					VehicleType:      "car",
+					Status:           "Pending",
+					OfferedDriverIDs: []string{"driver-1"},
 				}, nil
 			},
 		},
@@ -173,6 +177,31 @@ func TestBookingServiceDriverRejectsBookingFailsWhenNoEligibleDriversRemain(t *t
 
 	err := service.DriverRejectsBooking(context.Background(), "driver-1", "booking-1")
 	if err == nil || err.Error() != "no eligible drivers available" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBookingServiceDriverRejectsBookingRequiresOffer(t *testing.T) {
+	t.Parallel()
+
+	service := NewBookingService(
+		&fakeBookingRepository{
+			findByIDFn: func(ctx context.Context, id string) (*models.Booking, error) {
+				return &models.Booking{
+					ID:               id,
+					VehicleType:      "car",
+					Status:           "Pending",
+					OfferedDriverIDs: []string{"driver-2"},
+				}, nil
+			},
+		},
+		&fakeDriverRepository{},
+		nil,
+		&fakeMessagingClient{},
+	)
+
+	err := service.DriverRejectsBooking(context.Background(), "driver-1", "booking-1")
+	if err == nil || err.Error() != "booking was not offered to this driver" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

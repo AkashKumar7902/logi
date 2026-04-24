@@ -11,17 +11,16 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: main # Explicitly checks out the main branch
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '16' # Use Node.js version 16
+        node-version: '20'
 
     - name: Run keep-alive script
-      run: |
-        npm install cron
-        pwd
-        node ./.github/workflows/cron.js
+      env:
+        LOGI_KEEP_ALIVE_URL: ${{ vars.LOGI_KEEP_ALIVE_URL }}
+      run: node ./.github/workflows/cron.js

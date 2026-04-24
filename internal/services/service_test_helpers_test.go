@@ -182,6 +182,8 @@ type fakeDriverRepository struct {
 	updateDriverFn             func(context.Context, *models.Driver) error
 	updateLocationFn           func(context.Context, string, models.Location) error
 	updateCurrentBookingIDFn   func(context.Context, string, string) error
+	tryAssignCurrentBookingFn  func(context.Context, string, string) (bool, error)
+	clearCurrentBookingFn      func(context.Context, string, string) error
 	incrementAcceptedFn        func(context.Context, string) error
 	incrementTotalFn           func(context.Context, string) error
 	incrementCompletedFn       func(context.Context, string) error
@@ -261,6 +263,20 @@ func (f *fakeDriverRepository) UpdateLocation(ctx context.Context, driverID stri
 func (f *fakeDriverRepository) UpdateCurrentBookingID(ctx context.Context, driverID, bookingID string) error {
 	if f.updateCurrentBookingIDFn != nil {
 		return f.updateCurrentBookingIDFn(ctx, driverID, bookingID)
+	}
+	return nil
+}
+
+func (f *fakeDriverRepository) TryAssignCurrentBooking(ctx context.Context, driverID, bookingID string) (bool, error) {
+	if f.tryAssignCurrentBookingFn != nil {
+		return f.tryAssignCurrentBookingFn(ctx, driverID, bookingID)
+	}
+	return false, nil
+}
+
+func (f *fakeDriverRepository) ClearCurrentBookingIfMatches(ctx context.Context, driverID, bookingID string) error {
+	if f.clearCurrentBookingFn != nil {
+		return f.clearCurrentBookingFn(ctx, driverID, bookingID)
 	}
 	return nil
 }

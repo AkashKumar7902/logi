@@ -1,6 +1,7 @@
 package distance
 
 import (
+	"errors"
 	"logi/internal/models"
 	"math"
 )
@@ -15,6 +16,9 @@ func NewHaversineCalculator() *HaversineCalculator {
 
 // Calculate computes the distance and duration using the Haversine formula.
 func (h *HaversineCalculator) Calculate(pickup, dropoff models.Location) (*DistanceResult, error) {
+	if err := validateLocations(pickup, dropoff); err != nil {
+		return nil, err
+	}
 	distance := haversineDistance(pickup.Coordinates[1], pickup.Coordinates[0], dropoff.Coordinates[1], dropoff.Coordinates[0])
 	// Assume average speed of 40 km/h for duration estimation
 	duration := (distance / 40.0) * 60.0
@@ -22,6 +26,16 @@ func (h *HaversineCalculator) Calculate(pickup, dropoff models.Location) (*Dista
 		Distance: distance,
 		Duration: duration,
 	}, nil
+}
+
+func validateLocations(pickup, dropoff models.Location) error {
+	if err := models.ValidateLocation(pickup); err != nil {
+		return errors.New("invalid pickup location: " + err.Error())
+	}
+	if err := models.ValidateLocation(dropoff); err != nil {
+		return errors.New("invalid dropoff location: " + err.Error())
+	}
+	return nil
 }
 
 // haversineDistance calculates the distance between two points in kilometers.

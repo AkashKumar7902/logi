@@ -133,3 +133,40 @@ func TestRequestLoggingMiddlewareWritesJSON(t *testing.T) {
 		t.Fatalf("expected role in log payload, got %#v", got)
 	}
 }
+
+func TestRequestLoggingMiddlewareRedactsSensitiveQueryValues(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var output bytes.Buffer
+	originalLogger := baseLogger()
+	setLogger(newLogger(&output, false))
+	t.Cleanup(func() {
+		setLogger(originalLogger)
+	})
+
+	router := gin.New()
+	router.Use(RequestIDMiddleware())
+	router.Use(RequestLoggingMiddleware())
+	router.GET("/ws", func(c *gin.Context) {
+		c.Status(http.StatusSwitchingProtocols)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ws?token=jwt-value&trace=true&client_secret=hidden", nil)
+	req.Header.Set(RequestIDHeader, "req-redacted")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output.String())), &payload); err != nil {
+		t.Fatalf("expected JSON log output, got error: %v", err)
+	}
+
+	query, _ := payload["query"].(string)
+	if strings.Contains(query, "jwt-value") || strings.Contains(query, "hidden") {
+		t.Fatalf("expected sensitive query values to be redacted, got %q", query)
+	}
+	if !strings.Contains(query, "trace=true") || !strings.Contains(query, "token=%5BREDACTED%5D") {
+		t.Fatalf("expected non-sensitive query and redaction marker, got %q", query)
+	}
+}

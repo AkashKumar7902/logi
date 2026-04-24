@@ -31,8 +31,13 @@ func (h *DriverHandler) Register(c *gin.Context) {
 		VehicleType string `json:"vehicle_type"`
 	}
 
-	if err := c.BindJSON(&payload); err != nil {
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	payload.VehicleType = models.NormalizeVehicleType(payload.VehicleType)
+	if payload.VehicleType != "" && !models.IsValidVehicleType(payload.VehicleType) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "vehicle_type must be one of: bike, car, van"})
 		return
 	}
 
@@ -59,7 +64,7 @@ func (h *DriverHandler) Login(c *gin.Context) {
 		Password string `json:"password"`
 	}
 
-	if err := c.BindJSON(&payload); err != nil {
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
@@ -86,8 +91,12 @@ func (h *DriverHandler) UpdateStatus(c *gin.Context) {
 		Status string `json:"status"`
 	}
 
-	if err := c.BindJSON(&payload); err != nil {
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if err := models.ValidateDriverStatus(payload.Status); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -115,7 +124,7 @@ func (h *DriverHandler) UpdateBookingStatus(c *gin.Context) {
 		Status    string `json:"status"`
 	}
 
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
@@ -144,8 +153,12 @@ func (h *DriverHandler) UpdateLocation(c *gin.Context) {
 		Longitude float64 `json:"longitude"`
 	}
 
-	if err := c.BindJSON(&payload); err != nil {
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if err := models.ValidateLatitudeLongitude(payload.Latitude, payload.Longitude); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -189,7 +202,7 @@ func (h *DriverHandler) RespondToBooking(c *gin.Context) {
 		Response  string `json:"response"` // "accept" or "reject"
 	}
 
-	if err := c.BindJSON(&payload); err != nil {
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error() + "Invalid input"})
 		return
 	}

@@ -27,6 +27,10 @@ func NewGoogleMapsCalculator(apiKey string) *GoogleMapsCalculator {
 
 // Calculate computes the distance and duration using Google Maps Distance Matrix API.
 func (g *GoogleMapsCalculator) Calculate(pickup, dropoff models.Location) (*DistanceResult, error) {
+	if err := validateLocations(pickup, dropoff); err != nil {
+		return nil, err
+	}
+
 	origin := fmt.Sprintf("%f,%f", pickup.Coordinates[1], pickup.Coordinates[0])
 	destination := fmt.Sprintf("%f,%f", dropoff.Coordinates[1], dropoff.Coordinates[0])
 

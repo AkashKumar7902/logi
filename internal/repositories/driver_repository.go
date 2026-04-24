@@ -22,6 +22,8 @@ type DriverRepository interface {
 	UpdateDriver(ctx context.Context, driver *models.Driver) error
 	UpdateLocation(ctx context.Context, driverID string, location models.Location) error
 	UpdateCurrentBookingID(ctx context.Context, driverID, bookingID string) error
+	TryAssignCurrentBooking(ctx context.Context, driverID, bookingID string) (bool, error)
+	ClearCurrentBookingIfMatches(ctx context.Context, driverID, bookingID string) error
 	IncrementAcceptedBookings(ctx context.Context, driverID string) error
 	IncrementTotalBookings(ctx context.Context, driverID string) error
 	IncrementCompletedBookings(ctx context.Context, driverID string) error
@@ -225,6 +227,49 @@ func (r *driverRepository) UpdateCurrentBookingID(ctx context.Context, driverID,
 		opCtx,
 		bson.M{"_id": driverID},
 		bson.M{"$set": bson.M{"current_booking_id": bookingID}},
+	)
+	return err
+}
+
+func (r *driverRepository) TryAssignCurrentBooking(ctx context.Context, driverID, bookingID string) (bool, error) {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	filter := bson.M{
+		"_id":    driverID,
+		"status": models.DriverStatusAvailable,
+		"$or": bson.A{
+			bson.M{"current_booking_id": ""},
+			bson.M{"current_booking_id": bson.M{"$exists": false}},
+		},
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"current_booking_id": bookingID,
+			"status":             models.DriverStatusBusy,
+		},
+	}
+	result, err := r.collection.UpdateOne(opCtx, filter, update)
+	if err != nil {
+		return false, err
+	}
+	return result.ModifiedCount == 1, nil
+}
+
+func (r *driverRepository) ClearCurrentBookingIfMatches(ctx context.Context, driverID, bookingID string) error {
+	opCtx, cancel := utils.DBContext(ctx)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		opCtx,
+		bson.M{
+			"_id":                driverID,
+			"current_booking_id": bookingID,
+		},
+		bson.M{"$set": bson.M{
+			"current_booking_id": "",
+			"status":             models.DriverStatusAvailable,
+		}},
 	)
 	return err
 }
