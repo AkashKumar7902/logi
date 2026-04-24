@@ -119,9 +119,12 @@ func (r *driverRepository) FindAvailableDrivers(ctx context.Context, location mo
 	for cursor.Next(opCtx) {
 		var driver models.Driver
 		if err := cursor.Decode(&driver); err != nil {
-			continue
+			return nil, err
 		}
 		drivers = append(drivers, &driver)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return drivers, nil
 }
@@ -174,9 +177,12 @@ func (r *driverRepository) GetAllDrivers(ctx context.Context) ([]*models.Driver,
 	for cursor.Next(opCtx) {
 		var driver models.Driver
 		if err := cursor.Decode(&driver); err != nil {
-			continue
+			return nil, err
 		}
 		drivers = append(drivers, &driver)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return drivers, nil
 }

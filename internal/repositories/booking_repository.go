@@ -164,9 +164,12 @@ func (r *bookingRepository) FindPendingScheduledBookings(ctx context.Context) ([
 	for cursor.Next(opCtx) {
 		var booking models.Booking
 		if err := cursor.Decode(&booking); err != nil {
-			continue
+			return nil, err
 		}
 		bookings = append(bookings, &booking)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return bookings, nil
 }
@@ -221,9 +224,12 @@ func (r *bookingRepository) FindAssignedBookings(ctx context.Context, driverID s
 	for cursor.Next(opCtx) {
 		var booking models.Booking
 		if err := cursor.Decode(&booking); err != nil {
-			continue
+			return nil, err
 		}
 		bookings = append(bookings, &booking)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return bookings, nil
 }
@@ -262,9 +268,12 @@ func (r *bookingRepository) GetActiveBookingsByDriverID(ctx context.Context, dri
 	for cursor.Next(opCtx) {
 		var booking models.Booking
 		if err := cursor.Decode(&booking); err != nil {
-			continue
+			return nil, err
 		}
 		bookings = append(bookings, &booking)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return bookings, nil
 }
@@ -338,6 +347,9 @@ func (r *bookingRepository) GetAverageTripTime(ctx context.Context) (float64, er
 			return 0, err
 		}
 		return result.AverageTripTime, nil
+	}
+	if err := cursor.Err(); err != nil {
+		return 0, err
 	}
 
 	return 0, nil // No completed bookings

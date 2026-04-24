@@ -108,9 +108,12 @@ func (r *vehicleRepository) FindAll(ctx context.Context) ([]*models.Vehicle, err
 	for cursor.Next(opCtx) {
 		var vehicle models.Vehicle
 		if err := cursor.Decode(&vehicle); err != nil {
-			continue
+			return nil, err
 		}
 		vehicles = append(vehicles, &vehicle)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	return vehicles, nil
 }
